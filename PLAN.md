@@ -83,7 +83,7 @@ otp_challenges   id, phone, code_hash, expires_at, attempts   -- patient phone O
 
 Roughly 8–10 working days. Each phase ends with something demoable.
 
-### Phase 0 — Setup (Day 1)  ← in progress
+### Phase 0 — Setup (Day 1)  ✔ done
 - Repo layout: `backend/` (FastAPI) + `app/` (Flutter) + `docker-compose.yml` (Postgres + MinIO).
 - Backend: uv project, FastAPI app skeleton, config, async DB session, Alembic, health endpoint,
   pytest wired.
@@ -91,14 +91,20 @@ Roughly 8–10 working days. Each phase ends with something demoable.
   tag), role-selection landing screen.
 - `flutter analyze` / `ruff` / `pytest` all green on an empty slice.
 
-### Phase 1 — Identity & access accounts (Days 2–3)
-- Patient signup: phone OTP + name + DOB + optional CNIC → generate `mediCardCode` (8-char
-  Crockford base32 + checksum) and QR.
-- Doctor signup: email/password + licence no + specialty + hospital → `status: pending_verification`.
-- Admin review screen (or Firebase console + a Function) to flip a doctor to `active`.
-- Guardian flow: a patient account can create a linked minor profile.
-- Recovery: lost code → re-verify phone OTP (+ CNIC hash match if present) → reissue code on the
-  **same** profile. Never create a second profile.
+### Phase 1 — Identity & access accounts (Days 2–3)  ✔ backend + app flows done
+- Patient signup: phone OTP + name + optional CNIC → generate `medicard_code` (8-char Crockford
+  base32 + checksum). ✔ QR rendering deferred to Phase 3 (doctor scan).
+- Doctor signup: email/password (Argon2) + licence no + specialty + hospital →
+  `status: pending_verification`; `require_active_doctor` blocks record search until approved. ✔
+- Admin review queue: `GET /admin/doctors`, `POST /admin/doctors/{id}/review` behind `X-Admin-Key`.
+  ✔ (a small admin web screen is still a nice-to-have; console/curl works now.)
+- Guardian flow: `POST /patient/minors`, `GET /patient/profiles`. ✔
+- Recovery: `POST /auth/patient/recover/{request,verify}` re-verifies phone OTP (+ CNIC hash match
+  if on file) and reissues the code on the **same** profile. ✔
+- App: role-select → patient OTP screen / doctor register+login screen → home screens showing the
+  MediCard code and the doctor verification banner; token refresh + secure storage wired.
+- Endpoints proven end-to-end over HTTP; `pytest` (14) + `ruff` + `flutter analyze` + `flutter
+  test` (3) all green. Initial Alembic migration `0001_initial` verified up+down.
 
 ### Phase 2 — Records: upload → AI extraction → confirmation (Days 3–5)
 - Upload screen: camera / gallery / PDF picker → compress → `POST /records/upload` → MinIO.

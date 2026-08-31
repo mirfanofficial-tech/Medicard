@@ -23,12 +23,12 @@ class LandingScreen extends StatelessWidget {
               ),
               const Spacer(),
               FilledButton(
-                onPressed: () => context.go('/patient'),
+                onPressed: () => context.go('/patient/auth'),
                 child: const Text("I'm a patient"),
               ),
               const SizedBox(height: 12),
               OutlinedButton(
-                onPressed: () => context.go('/doctor'),
+                onPressed: () => context.go('/doctor/auth'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                 ),

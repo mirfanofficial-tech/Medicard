@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     access_token_ttl_min: int = 30
     refresh_token_ttl_days: int = 30
 
+    admin_api_key: str = "change-me-admin-dev-only"
+    otp_ttl_min: int = 5
+    otp_max_attempts: int = 5
+
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "medicard"
     s3_secret_key: str = "medicard123"

@@ -34,4 +34,10 @@ flutter run                    # pick a device; -d chrome works for quick iterat
 
 ## Status
 
-Phase 0 (setup) — in progress.
+- Phase 0 (setup) — done.
+- Phase 1 (identity & auth) — done: patient phone-OTP, doctor register/login + licence-review
+  queue, guardian minors, lost-code recovery. Backend `pytest` (14) + app `flutter test` (3) green.
+- Next: Phase 2 — record upload → Claude extraction → confirmation screen.
+
+Docker Desktop was down during Phase 1, so the stack has been exercised against SQLite. Bring up
+`infra/docker-compose.yml` for the Postgres path.

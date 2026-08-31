@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ENV", "dev")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
+os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
 
 from app.db import get_session  # noqa: E402
 from app.main import app  # noqa: E402

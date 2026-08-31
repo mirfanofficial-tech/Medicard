@@ -33,4 +33,5 @@ Thumbs.db
 
 # ---- Data / volumes ----
 infra/volumes/
+backend/*.db
 *.log
