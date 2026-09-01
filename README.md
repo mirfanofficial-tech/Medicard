@@ -46,8 +46,13 @@ flutter run                    # pick a device; -d chrome works for quick iterat
 - Phase 4 (advisory AI) — done: `GET /doctor/patients/{id}/ai-summary` and `POST …/ai-ask`
   (`claude-sonnet-5`), summariser/flagger only — never prescribes — every claim cites a source
   record; grounded Ask that declines off-record questions. `FAKE_AI=true` (or no key) stubs it.
+- Phase 5 (polish + demo) — mostly done: `python -m app.seed` demo data, [DEMO.md](DEMO.md)
+  runbook + 5-min script, [docs/STATUS.md](docs/STATUS.md) honesty page, on-device image
+  compression, timeline filters, inline source-photo preview. Offline queue / QR / Android build
+  still open.
 - Backend `pytest` (31) + app `flutter test` (3) green.
-- Next: Phase 5 — polish, low-bandwidth mode, demo seed + script.
+
+See [DEMO.md](DEMO.md) to run the whole thing with one command (no Docker, no API key).
 
 Docker Desktop has been down throughout, so the stack has been exercised against SQLite +
 `STORAGE_BACKEND=local`. Bring up `infra/docker-compose.yml` for the Postgres + MinIO path.

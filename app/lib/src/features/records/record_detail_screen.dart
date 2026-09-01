@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../theme.dart';
 import 'models.dart';
 import 'records_repository.dart';
+import 'source_image.dart';
 
 final _recordProvider =
     FutureProvider.autoDispose.family<RecordDetail, String>((ref, id) {
@@ -90,7 +91,7 @@ class RecordDetailScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           Text('Source', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 6),
-          Text(d.sourceUrl!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          SourceImage(url: d.sourceUrl!),
         ],
       ],
     );

@@ -167,12 +167,19 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - Backend `pytest` 31 (4 AI cases: grant required, flags cite real records + advisory notice,
   Ask grounded on/off-topic). `ruff` clean. Smoke-tested over HTTP. `flutter analyze` + tests (3).
 
-### Phase 5 — Polish, honesty, demo (Days 9–10)
-- Advisory-only disclaimer in the UI and the pitch deck.
-- Low-bandwidth mode: aggressive image compression, text-only timeline toggle, offline write queue.
-- Seed a realistic demo patient (diabetes + hypertension, a few labs, an allergy, one sensitive entry).
-- "What's solved / what's not yet / our plan" slide.
-- Rehearse the demo script (Section 6).
+### Phase 5 — Polish, honesty, demo (Days 9–10)  ◑ mostly done
+- `python -m app.seed` — idempotent: Dr Sara Ahmed (verified) + Ayesha Khan with 6 records
+  (1 sensitive), a rising HbA1c trend and an NSAID-on-ACE-inhibitor combo for the AI to flag.
+  Prints the login + MediCard code. ✔
+- [DEMO.md](DEMO.md) — one-command startup (SQLite + local storage + stubbed AI, no Docker/key)
+  and the 5-minute script. ✔
+- [docs/STATUS.md](docs/STATUS.md) — "what's solved / what's not yet / why the AI is advisory",
+  doubles as the honesty slide. ✔
+- App polish: on-device image downscale+recompress before upload (1600px / q80); timeline
+  type-filter chips; the record source photo now renders inline on the patient detail screen. ✔
+- Advisory-only banner already persistent on the AI panel (Phase 4).
+- **Still open:** offline write queue + text-only mode; QR scan; a guardian-approves-for-minor
+  screen; real FCM device registration; Postgres/MinIO run; an Android device build.
 
 ### Cross-cutting — security (throughout)
 - Every query in the doctor service layer is scoped by a verified `access_grant`; there is no

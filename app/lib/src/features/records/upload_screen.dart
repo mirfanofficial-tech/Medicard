@@ -50,7 +50,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }
 
   Future<_Pick?> _fromImagePicker(ImageSource source) async {
-    final x = await ImagePicker().pickImage(source: source, imageQuality: 85);
+    // Downscale + recompress on-device so uploads stay small on poor connections.
+    final x = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
     if (x == null) return null;
     final bytes = await x.readAsBytes();
     final ct = x.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
