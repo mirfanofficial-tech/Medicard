@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     fake_extraction: bool = False
 
     grant_ttl_hours: int = 12
+    break_glass_ttl_minutes: int = 60
 
     fcm_credentials_file: str = ""
 

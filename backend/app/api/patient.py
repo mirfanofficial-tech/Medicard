@@ -1,15 +1,36 @@
-from fastapi import APIRouter, Depends, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import Principal, require_patient
 from app.db import get_session
-from app.models import Patient
+from app.models import (
+    AccessGrant,
+    AccessRequest,
+    AccessRequestStatus,
+    AuditLog,
+    Doctor,
+    Patient,
+)
+from app.schemas.access import AuditEntryView, GrantView, PendingRequestView
 from app.schemas.auth import MinorCreate, PatientSummary
+from app.services import access as acc
 from app.services.medicard_code import generate_unique_code
 from app.services.patients import self_patient as _self_patient
 
 router = APIRouter(prefix="/patient", tags=["patient"])
+
+
+async def _my_patient_ids(session: AsyncSession, user_id: uuid.UUID) -> tuple[Patient, dict]:
+    """Return (self, {patient_id: name}) covering self + guardian-managed minors."""
+    me = await _self_patient(session, user_id)
+    minors = (
+        await session.execute(select(Patient).where(Patient.guardian_patient_id == me.id))
+    ).scalars().all()
+    names = {me.id: me.name, **{m.id: m.name for m in minors}}
+    return me, names
 
 
 @router.get("/profiles", response_model=list[PatientSummary])
@@ -34,11 +55,7 @@ async def list_profiles(
     ]
 
 
-@router.post(
-    "/minors",
-    response_model=PatientSummary,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/minors", response_model=PatientSummary, status_code=status.HTTP_201_CREATED)
 async def create_minor(
     body: MinorCreate,
     principal: Principal = Depends(require_patient),
@@ -60,3 +77,164 @@ async def create_minor(
         medicard_code=minor.medicard_code,
         is_minor=True,
     )
+
+
+# ---- consent: pending requests, approve / deny ----
+
+
+@router.get("/access-requests", response_model=list[PendingRequestView])
+async def pending_requests(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> list[PendingRequestView]:
+    _, names = await _my_patient_ids(session, principal.user_id)
+    rows = (
+        await session.execute(
+            select(AccessRequest, Doctor)
+            .join(Doctor, Doctor.id == AccessRequest.doctor_id)
+            .where(
+                AccessRequest.patient_id.in_(list(names.keys())),
+                AccessRequest.status == AccessRequestStatus.pending.value,
+            )
+            .order_by(AccessRequest.created_at.desc())
+        )
+    ).all()
+    return [
+        PendingRequestView(
+            request_id=str(r.id),
+            doctor_name=d.name,
+            hospital=d.hospital,
+            specialty=d.specialty,
+            for_patient=names[r.patient_id],
+            created_at=r.created_at,
+        )
+        for r, d in rows
+    ]
+
+
+async def _owned_request(session: AsyncSession, principal: Principal, request_id: str):
+    _, names = await _my_patient_ids(session, principal.user_id)
+    try:
+        rid = uuid.UUID(request_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found") from exc
+    req = await session.get(AccessRequest, rid)
+    if req is None or req.patient_id not in names:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+    return req
+
+
+@router.post("/access-requests/{request_id}/approve", response_model=GrantView)
+async def approve(
+    request_id: str,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> GrantView:
+    req = await _owned_request(session, principal, request_id)
+    grant = await acc.approve_request(session, req, principal.user_id)
+    doctor = await session.get(Doctor, grant.doctor_id)
+    await session.commit()
+    return GrantView(
+        grant_id=str(grant.id),
+        doctor_name=doctor.name,
+        hospital=doctor.hospital,
+        scope=grant.scope,
+        source=grant.source,
+        granted_at=grant.granted_at,
+        expires_at=grant.expires_at,
+        ended_at=grant.ended_at,
+    )
+
+
+@router.post("/access-requests/{request_id}/deny", status_code=204)
+async def deny(
+    request_id: str,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    req = await _owned_request(session, principal, request_id)
+    await acc.deny_request(session, req, principal.user_id)
+    await session.commit()
+
+
+# ---- active grants + revoke ----
+
+
+@router.get("/grants", response_model=list[GrantView])
+async def my_grants(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> list[GrantView]:
+    _, names = await _my_patient_ids(session, principal.user_id)
+    rows = (
+        await session.execute(
+            select(AccessGrant, Doctor)
+            .join(Doctor, Doctor.id == AccessGrant.doctor_id)
+            .where(AccessGrant.patient_id.in_(list(names.keys())))
+            .order_by(AccessGrant.granted_at.desc())
+        )
+    ).all()
+    return [
+        GrantView(
+            grant_id=str(g.id),
+            doctor_name=d.name,
+            hospital=d.hospital,
+            scope=g.scope,
+            source=g.source,
+            granted_at=g.granted_at,
+            expires_at=g.expires_at,
+            ended_at=g.ended_at,
+        )
+        for g, d in rows
+    ]
+
+
+@router.post("/grants/{grant_id}/revoke", status_code=204)
+async def revoke_grant(
+    grant_id: str,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    _, names = await _my_patient_ids(session, principal.user_id)
+    try:
+        gid = uuid.UUID(grant_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grant not found") from exc
+    grant = await session.get(AccessGrant, gid)
+    if grant is None or grant.patient_id not in names:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grant not found")
+    await acc.end_grant(session, grant, principal.user_id, "patient")
+    await session.commit()
+
+
+# ---- access history ----
+
+
+@router.get("/access-history", response_model=list[AuditEntryView])
+async def access_history(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> list[AuditEntryView]:
+    _, names = await _my_patient_ids(session, principal.user_id)
+    rows = (
+        await session.execute(
+            select(AuditLog, Doctor)
+            .join(Doctor, Doctor.id == AuditLog.doctor_id, isouter=True)
+            .where(AuditLog.patient_id.in_(list(names.keys())))
+            .order_by(AuditLog.at.desc())
+        )
+    ).all()
+    out: list[AuditEntryView] = []
+    for entry, doctor in rows:
+        out.append(
+            AuditEntryView(
+                at=entry.at,
+                action=entry.action,
+                scope=entry.scope,
+                doctor_name=doctor.name if doctor else entry.meta.get("doctor_name"),
+                hospital=doctor.hospital if doctor else entry.meta.get("hospital"),
+                reason=entry.meta.get("reason"),
+                for_patient=names.get(entry.patient_id, "—"),
+            )
+        )
+    return out

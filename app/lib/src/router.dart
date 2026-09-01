@@ -8,6 +8,12 @@ import 'features/doctor/doctor_home_screen.dart';
 import 'features/landing/landing_screen.dart';
 import 'features/patient/patient_auth_screen.dart';
 import 'features/patient/patient_home_screen.dart';
+import 'features/doctor/critical_summary_screen.dart';
+import 'features/doctor/doctor_record_detail_screen.dart';
+import 'features/doctor/patient_records_screen.dart';
+import 'features/doctor/request_access_screen.dart';
+import 'features/patient/access_history_screen.dart';
+import 'features/patient/access_requests_screen.dart';
 import 'features/records/extraction_review_screen.dart';
 import 'features/records/record_detail_screen.dart';
 import 'features/records/timeline_screen.dart';
@@ -50,6 +56,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/doctor/auth', builder: (_, __) => const DoctorAuthScreen()),
       GoRoute(path: '/doctor', builder: (_, __) => const DoctorHomeScreen()),
+      GoRoute(path: '/doctor/request', builder: (_, __) => const RequestAccessScreen()),
+      GoRoute(
+        path: '/doctor/patients/:id/records',
+        builder: (_, s) => DoctorPatientRecordsScreen(patientId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/doctor/patients/:id/records/:rid',
+        builder: (_, s) => DoctorRecordDetailScreen(
+          patientId: s.pathParameters['id']!,
+          recordId: s.pathParameters['rid']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/patients/:id/critical',
+        builder: (_, s) => CriticalSummaryScreen(patientId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/patient/access-requests',
+        builder: (_, __) => const AccessRequestsScreen(),
+      ),
+      GoRoute(
+        path: '/patient/access-history',
+        builder: (_, __) => const AccessHistoryScreen(),
+      ),
     ],
   );
 });

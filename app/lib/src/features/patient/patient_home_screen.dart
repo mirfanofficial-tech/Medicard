@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../access/access_repository.dart';
 
 class PatientHomeScreen extends ConsumerWidget {
   const PatientHomeScreen({super.key});
@@ -69,10 +70,24 @@ class PatientHomeScreen extends ConsumerWidget {
             label: const Text('Add a prescription or report'),
           ),
           const SizedBox(height: 24),
-          const ListTile(
-            leading: Icon(Icons.lock_clock_outlined),
-            title: Text('Access requests & history (Phase 3)'),
-            dense: true,
+          Consumer(
+            builder: (context, ref, _) {
+              final pending = ref.watch(pendingRequestsProvider);
+              final count = pending.maybeWhen(data: (r) => r.length, orElse: () => 0);
+              return OutlinedButton.icon(
+                onPressed: () => context.go('/patient/access-requests'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                icon: const Icon(Icons.how_to_reg),
+                label: Text(count > 0 ? 'Access requests ($count pending)' : 'Access requests'),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/patient/access-history'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            icon: const Icon(Icons.history),
+            label: const Text('Access history'),
           ),
         ],
       ),

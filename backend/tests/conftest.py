@@ -44,6 +44,13 @@ async def client():
     app.dependency_overrides.clear()
 
 
+@pytest_asyncio.fixture
+async def db():
+    """Direct DB session for arranging/inspecting state that has no endpoint."""
+    async with _TestSession() as session:
+        yield session
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

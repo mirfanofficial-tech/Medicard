@@ -127,15 +127,28 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - Deferred: image compression before upload, type filters on the timeline, presigned-URL image
   preview widget (URL is returned, not yet rendered).
 
-### Phase 3 — Consent-gated doctor access (Days 5–7)
-- Doctor enters code / scans QR → `POST /doctor/access-requests` → FCM push to patient.
-- Patient approve/deny screen → on approve, `access_grant` (`scope: full`, `expires_at` = now + 12h;
-  doctor can also end early) + `audit_log` row.
-- `GET /doctor/patients/{id}/records` enforces the grant, strips `sensitive` entries, logs the view.
-- **Break-glass:** doctor toggles "Emergency access", must type a reason → endpoint returns the
-  `critical` subset (allergies, blood type, chronic conditions, current meds) → `audit_log` row
-  flagged `break_glass` → patient gets a notification and an entry in Access History.
-- **Access History screen** (patient): every view — who, when, scope, emergency flag.
+### Phase 3 — Consent-gated doctor access (Days 5–7)  ✔ done
+- Doctor enters code → `POST /doctor/access-requests` (active doctors only) → patient notified
+  (FCM stub — logs; device-token registry still TODO) and sees it in Pending. ✔
+- Patient approve/deny → on approve, `access_grant` (`scope: full`, `expires_at` = now + 12h) +
+  `audit_log` `grant`. Deny logs `deny`. ✔
+- `GET /doctor/patients/{id}/records` (+ `/records/{rid}`) require a live full grant, exclude
+  `sensitive` records entirely, and write an `audit_log` `view` row in the same commit. ✔
+- **Break-glass:** `POST /doctor/break-glass` {code, reason} (reason required) → immediate
+  `scope: critical`, `source: break_glass`, short TTL grant → returns the aggregated critical
+  subset (allergies, current meds from prescriptions, conditions) → `audit_log` `break_glass`
+  with the reason → patient notified. Critical scope cannot open the full timeline. ✔
+- `GET /doctor/patients/{id}/critical` works under either scope. Doctor can `end` a grant early;
+  patient can `revoke` any grant (`audit_log` `end` / `revoke`). ✔
+- **App:** doctor "Access a patient record" hub (code entry, emergency dialog, live grants list
+  with Open/End); doctor patient-timeline + record detail + red critical-summary screen; patient
+  "Access requests" (approve/deny) and "Access history" (active grants with Revoke + full audit
+  log). ✔
+- Backend `pytest` 27 (8 access scenarios: no-grant/denied/expired/ended/revoked 403s, scoped
+  read, break-glass critical-only + logging, reason required). `ruff` clean. Migration
+  `0003_access` verified up+down. Full flow smoke-tested over HTTP. `flutter analyze` + tests (3).
+- Deferred: real FCM device registration; QR scan (code is typed); guardian-approves-minor is
+  wired server-side but has no dedicated app screen yet.
 
 ### Phase 4 — AI clinical support (Days 7–9)
 - Doctor record view → "AI Summary" panel → `GET /doctor/patients/{id}/ai-summary` sends the

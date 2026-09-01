@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../theme.dart';
@@ -57,12 +58,12 @@ class DoctorHomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-          ListTile(
-            enabled: verified,
-            leading: const Icon(Icons.person_search),
-            title: const Text('Request access by MediCard code (Phase 3)'),
-            dense: true,
+          FilledButton.icon(
+            onPressed: verified ? () => context.go('/doctor/request') : null,
+            icon: const Icon(Icons.person_search),
+            label: const Text('Access a patient record'),
           ),
+          const SizedBox(height: 16),
           const ListTile(
             leading: Icon(Icons.summarize_outlined),
             title: Text('Advisory AI summary — never prescribes (Phase 4)'),

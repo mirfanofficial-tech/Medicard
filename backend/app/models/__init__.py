@@ -1,5 +1,14 @@
 """SQLAlchemy models. Import every model here so Alembic autogenerate sees them."""
 
+from app.models.access import (
+    AccessGrant,
+    AccessRequest,
+    AccessRequestStatus,
+    AuditAction,
+    AuditLog,
+    GrantScope,
+    GrantSource,
+)
 from app.models.base import Base
 from app.models.doctor import Doctor, DoctorStatus
 from app.models.otp import OtpChallenge, OtpPurpose
@@ -20,4 +29,11 @@ __all__ = [
     "RecordType",
     "ExtractionJob",
     "ExtractionStatus",
+    "AccessRequest",
+    "AccessRequestStatus",
+    "AccessGrant",
+    "GrantScope",
+    "GrantSource",
+    "AuditLog",
+    "AuditAction",
 ]
