@@ -42,13 +42,19 @@ class DoctorPatientRecordsScreen extends ConsumerWidget {
               style: TextStyle(fontSize: 12),
             ),
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => context.go('/doctor/patients/$patientId/critical'),
-              icon: const Icon(Icons.emergency_outlined),
-              label: const Text('Critical summary'),
-            ),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: () => context.go('/doctor/patients/$patientId/ai'),
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('AI summary'),
+              ),
+              TextButton.icon(
+                onPressed: () => context.go('/doctor/patients/$patientId/critical'),
+                icon: const Icon(Icons.emergency_outlined),
+                label: const Text('Critical'),
+              ),
+            ],
           ),
           Expanded(
             child: records.when(

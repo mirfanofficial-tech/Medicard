@@ -43,8 +43,11 @@ flutter run                    # pick a device; -d chrome works for quick iterat
 - Phase 3 (consent-gated doctor access) — done: doctor requests by code → patient approves →
   time-boxed, logged, scoped grant; sensitive records withheld; break-glass emergency mode
   (critical-only, logged, reason required); patient Access History with revoke.
-- Backend `pytest` (27) + app `flutter test` (3) green.
-- Next: Phase 4 — advisory AI clinical summary + grounded "Ask AI".
+- Phase 4 (advisory AI) — done: `GET /doctor/patients/{id}/ai-summary` and `POST …/ai-ask`
+  (`claude-sonnet-5`), summariser/flagger only — never prescribes — every claim cites a source
+  record; grounded Ask that declines off-record questions. `FAKE_AI=true` (or no key) stubs it.
+- Backend `pytest` (31) + app `flutter test` (3) green.
+- Next: Phase 5 — polish, low-bandwidth mode, demo seed + script.
 
 Docker Desktop has been down throughout, so the stack has been exercised against SQLite +
 `STORAGE_BACKEND=local`. Bring up `infra/docker-compose.yml` for the Postgres + MinIO path.

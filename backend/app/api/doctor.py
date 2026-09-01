@@ -22,8 +22,10 @@ from app.schemas.access import (
     DoctorGrantView,
     GrantView,
 )
+from app.schemas.ai import AiAnswer, AiAskRequest, AiSummary
 from app.schemas.record import RecordData, RecordDetail, RecordSummary
 from app.services import access as acc
+from app.services import ai_summary as ai
 from app.services.notify import notify_patient
 
 router = APIRouter(prefix="/doctor", tags=["doctor"])
@@ -266,6 +268,67 @@ async def patient_record_detail(
         source_url=None,
         extraction=None,
     )
+
+
+async def _shared_records(session: AsyncSession, patient_id) -> list[Record]:
+    return list(
+        (
+            await session.execute(
+                select(Record)
+                .where(Record.patient_id == patient_id, Record.sensitive.is_(False))
+                .order_by(Record.doc_date.is_(None), Record.doc_date.desc())
+            )
+        ).scalars().all()
+    )
+
+
+@router.get("/patients/{patient_id}/ai-summary", response_model=AiSummary)
+async def ai_summary(
+    patient_id: str,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> AiSummary:
+    patient = await _load_patient(session, patient_id)
+    grant = await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+    result = await ai.summarize(records)
+    await acc.log(
+        session,
+        patient_id=patient.id,
+        actor_id=None,
+        actor_role="doctor",
+        doctor_id=doctor.id,
+        action=AuditAction.view.value,
+        scope=grant.scope,
+        meta={"view": "ai_summary", "model": result["model"]},
+    )
+    await session.commit()
+    return AiSummary(**result)
+
+
+@router.post("/patients/{patient_id}/ai-ask", response_model=AiAnswer)
+async def ai_ask(
+    patient_id: str,
+    body: AiAskRequest,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> AiAnswer:
+    patient = await _load_patient(session, patient_id)
+    grant = await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+    result = await ai.ask(records, body.question)
+    await acc.log(
+        session,
+        patient_id=patient.id,
+        actor_id=None,
+        actor_role="doctor",
+        doctor_id=doctor.id,
+        action=AuditAction.view.value,
+        scope=grant.scope,
+        meta={"view": "ai_ask", "model": result["model"], "question": body.question[:200]},
+    )
+    await session.commit()
+    return AiAnswer(**result)
 
 
 @router.post("/grants/{grant_id}/end", status_code=204)

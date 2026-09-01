@@ -150,18 +150,22 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - Deferred: real FCM device registration; QR scan (code is typed); guardian-approves-minor is
   wired server-side but has no dedicated app screen yet.
 
-### Phase 4 — AI clinical support (Days 7–9)
-- Doctor record view → "AI Summary" panel → `GET /doctor/patients/{id}/ai-summary` sends the
-  structured records to `claude-sonnet-5`. System prompt constraints:
-  - summarise relevant history (conditions, current meds, allergies, trends);
-  - flag things worth a second look (rising HbA1c, drug-interaction risk);
-  - **never** output a drug name + dose as a recommendation;
-  - every statement cites the record it came from.
-  - Output schema: `{ summary, flags: [{text, severity, sourceRecordIds[]}], relevantHistory: [...] }`.
-- Render flags with source chips ("from Lab Report, 10 May") that deep-link to the record.
-- "Ask AI" box: question + this patient's records as the only context; same grounding rules;
-  answers only from records; says so when the answer isn't in the records.
-- Persistent advisory-only banner on the panel.
+### Phase 4 — AI clinical support (Days 7–9)  ✔ done
+- `GET /doctor/patients/{id}/ai-summary` (live full grant) → `claude-sonnet-5` over the shared
+  records. System prompt: summarise + flag only; **never** recommend starting/stopping/changing a
+  medication or pair a drug with a dose as an action; no diagnosis not already in the record;
+  every statement and flag must cite `source_record_ids`. Output
+  `{summary, flags:[{text, severity(info|watch|urgent), source_record_ids[]}], relevant_history[],
+  model, advisory_notice}`. `FAKE_AI=true` / no key → deterministic stub citing real record ids.
+- `POST /doctor/patients/{id}/ai-ask` {question} → answers **only** from the records JSON, cites
+  `source_record_ids`, sets `answered_from_records: false` and declines when the answer isn't in
+  the record. Both endpoints write an `audit_log` `view` row (`meta.view = ai_summary|ai_ask`).
+- App: `AiPanelScreen` — persistent advisory-only banner, summary text, flag cards with a
+  severity chip and tappable source chips (→ record detail), grounded Ask box with the same
+  source chips and an amber card when the answer is not from the record. Reached from the doctor
+  patient-records screen ("AI summary").
+- Backend `pytest` 31 (4 AI cases: grant required, flags cite real records + advisory notice,
+  Ask grounded on/off-topic). `ruff` clean. Smoke-tested over HTTP. `flutter analyze` + tests (3).
 
 ### Phase 5 — Polish, honesty, demo (Days 9–10)
 - Advisory-only disclaimer in the UI and the pitch deck.

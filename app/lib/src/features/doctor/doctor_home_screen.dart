@@ -65,8 +65,9 @@ class DoctorHomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           const ListTile(
-            leading: Icon(Icons.summarize_outlined),
-            title: Text('Advisory AI summary — never prescribes (Phase 4)'),
+            leading: Icon(Icons.auto_awesome),
+            title: Text('Advisory AI summary'),
+            subtitle: Text('Open a patient record, then tap “AI summary”. It never prescribes.'),
             dense: true,
           ),
         ],

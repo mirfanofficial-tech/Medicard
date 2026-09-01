@@ -13,6 +13,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long"
 os.environ.setdefault("STORAGE_BACKEND", "local")
 os.environ.setdefault("STORAGE_LOCAL_DIR", tempfile.mkdtemp(prefix="medicard-test-store-"))
 os.environ.setdefault("FAKE_EXTRACTION", "true")
+os.environ.setdefault("FAKE_AI", "true")
 
 from app.db import get_session  # noqa: E402
 from app.main import app  # noqa: E402

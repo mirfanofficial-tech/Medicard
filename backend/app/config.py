@@ -32,9 +32,10 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-5"
-    # When true (or when no API key is set), extraction returns a deterministic
+    # When true (or when no API key is set), the AI features return a deterministic
     # stub instead of calling Claude — keeps the flow demoable offline.
     fake_extraction: bool = False
+    fake_ai: bool = False
 
     grant_ttl_hours: int = 12
     break_glass_ttl_minutes: int = 60

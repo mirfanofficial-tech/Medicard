@@ -81,6 +81,72 @@ class AuditEntry {
       );
 }
 
+class AiFlag {
+  AiFlag({required this.text, required this.severity, required this.sourceRecordIds});
+
+  final String text;
+  final String severity; // info | watch | urgent
+  final List<String> sourceRecordIds;
+
+  factory AiFlag.fromJson(Map<String, dynamic> j) => AiFlag(
+        text: j['text'] as String? ?? '',
+        severity: j['severity'] as String? ?? 'info',
+        sourceRecordIds: (j['source_record_ids'] as List? ?? [])
+            .map((e) => e.toString())
+            .toList(),
+      );
+}
+
+class AiSummary {
+  AiSummary({
+    required this.summary,
+    required this.flags,
+    required this.relevantHistory,
+    required this.model,
+    required this.advisoryNotice,
+  });
+
+  final String summary;
+  final List<AiFlag> flags;
+  final List<String> relevantHistory;
+  final String model;
+  final String advisoryNotice;
+
+  factory AiSummary.fromJson(Map<String, dynamic> j) => AiSummary(
+        summary: j['summary'] as String? ?? '',
+        flags: (j['flags'] as List? ?? [])
+            .map((e) => AiFlag.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        relevantHistory:
+            (j['relevant_history'] as List? ?? []).map((e) => e.toString()).toList(),
+        model: j['model'] as String? ?? '',
+        advisoryNotice: j['advisory_notice'] as String? ?? '',
+      );
+}
+
+class AiAnswer {
+  AiAnswer({
+    required this.answer,
+    required this.sourceRecordIds,
+    required this.answeredFromRecords,
+    required this.advisoryNotice,
+  });
+
+  final String answer;
+  final List<String> sourceRecordIds;
+  final bool answeredFromRecords;
+  final String advisoryNotice;
+
+  factory AiAnswer.fromJson(Map<String, dynamic> j) => AiAnswer(
+        answer: j['answer'] as String? ?? '',
+        sourceRecordIds: (j['source_record_ids'] as List? ?? [])
+            .map((e) => e.toString())
+            .toList(),
+        answeredFromRecords: j['answered_from_records'] as bool? ?? false,
+        advisoryNotice: j['advisory_notice'] as String? ?? '',
+      );
+}
+
 class CriticalView {
   CriticalView({
     required this.patientName,

@@ -47,6 +47,17 @@ class AccessRepository {
 
   Future<void> endGrant(String grantId) => _dio.post('/doctor/grants/$grantId/end');
 
+  Future<AiSummary> aiSummary(String patientId) async {
+    final r = await _dio.get('/doctor/patients/$patientId/ai-summary');
+    return AiSummary.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<AiAnswer> aiAsk(String patientId, String question) async {
+    final r = await _dio.post('/doctor/patients/$patientId/ai-ask',
+        data: {'question': question});
+    return AiAnswer.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
   // ---- patient ----
 
   Future<List<PendingRequest>> pendingRequests() async {
@@ -96,3 +107,8 @@ final accessHistoryProvider = FutureProvider.autoDispose<List<AuditEntry>>(
 final patientGrantsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
   (ref) => ref.watch(accessRepositoryProvider).myGrants(),
 );
+
+final aiSummaryProvider =
+    FutureProvider.autoDispose.family<AiSummary, String>((ref, patientId) {
+  return ref.watch(accessRepositoryProvider).aiSummary(patientId);
+});
