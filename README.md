@@ -50,7 +50,10 @@ flutter run                    # pick a device; -d chrome works for quick iterat
   runbook + 5-min script, [docs/STATUS.md](docs/STATUS.md) honesty page, on-device image
   compression, timeline filters, inline source-photo preview. Offline queue / QR / Android build
   still open.
-- Backend `pytest` (31) + app `flutter test` (3) green.
+- Phase 6 (prescription assistant) — done: doctor writes the prescription; the assistant pre-fills
+  lines only from the patient's own recorded medicines and runs a deterministic allergy /
+  interaction / duplicate check on the draft. No model in the loop, nothing new proposed.
+- Backend `pytest` (37) + app `flutter test` (3) green.
 
 See [DEMO.md](DEMO.md) to run the whole thing with one command (no Docker, no API key).
 

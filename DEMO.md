@@ -45,10 +45,17 @@ ACE inhibitor) — both are what the AI summary should flag.
    flags call out the rising HbA1c and the NSAID + ACE-inhibitor combination, each with a source
    chip that jumps to the record. Ask: *"Any documented penicillin allergy?"* → grounded answer
    with a source. Ask something off-record → it declines.
-4. **Access history.** As Ayesha → "Access history" → every view Dr Sara made is listed, with the
-   active grant and a **Revoke** button.
-5. **Break-glass.** As Dr Sara → "Access a patient record" → **Emergency access (critical only)** →
+4. **Prescription assistant.** In the patient record, tap **Prescribe**. The allergy banner shows
+   Penicillin. Tick **Metformin** and **Ramipril** from "Ayesha's record" — they drop into the
+   draft, badged "from record". Add **Ibuprofen** manually → the checks panel flags the NSAID +
+   ACE-inhibitor interaction against the ramipril she's already on; type **Amoxicillin** → an
+   urgent allergy conflict. Remove those, **Save prescription** → it lands on Ayesha's timeline
+   authored by Dr Sara. Point out: the assistant only ever lists medicines already in her record,
+   the checks are a rule engine, and Dr Sara is the named prescriber.
+6. **Access history.** As Ayesha → "Access history" → every view *and the prescription* Dr Sara
+   made is listed, with the active grant and a **Revoke** button.
+7. **Break-glass.** As Dr Sara → "Access a patient record" → **Emergency access (critical only)** →
    type a reason → you get allergies + current meds + conditions only, and it cannot open the full
    timeline. As Ayesha → "Access history" shows the emergency entry **with the stated reason**.
-6. Close on **docs/STATUS.md** — what's solved, what isn't yet, and why the AI is deliberately
+8. Close on **docs/STATUS.md** — what's solved, what isn't yet, and why the AI is deliberately
    advisory.

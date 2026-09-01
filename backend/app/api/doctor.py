@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -23,9 +24,19 @@ from app.schemas.access import (
     GrantView,
 )
 from app.schemas.ai import AiAnswer, AiAskRequest, AiSummary
+from app.schemas.prescribe import (
+    RxCandidate,
+    RxCheck,
+    RxCheckRequest,
+    RxCheckResult,
+    RxContext,
+    RxCreateRequest,
+    RxCreateResult,
+)
 from app.schemas.record import RecordData, RecordDetail, RecordSummary
 from app.services import access as acc
 from app.services import ai_summary as ai
+from app.services import prescribe as rx
 from app.services.notify import notify_patient
 
 router = APIRouter(prefix="/doctor", tags=["doctor"])
@@ -329,6 +340,118 @@ async def ai_ask(
     )
     await session.commit()
     return AiAnswer(**result)
+
+
+@router.get("/patients/{patient_id}/prescribe/context", response_model=RxContext)
+async def prescribe_context(
+    patient_id: str,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> RxContext:
+    patient = await _load_patient(session, patient_id)
+    await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+    return RxContext(
+        patient_name=patient.name,
+        candidates=[RxCandidate(**c) for c in rx.current_medications(records)],
+        known_allergies=rx.known_allergies(records),
+    )
+
+
+@router.post("/patients/{patient_id}/prescribe/check", response_model=RxCheckResult)
+async def prescribe_check(
+    patient_id: str,
+    body: RxCheckRequest,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> RxCheckResult:
+    patient = await _load_patient(session, patient_id)
+    await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+    draft = [m.model_dump() for m in body.medications]
+    return RxCheckResult(checks=[RxCheck(**c) for c in rx.check(records, draft)])
+
+
+@router.post("/patients/{patient_id}/prescribe", response_model=RxCreateResult, status_code=201)
+async def prescribe_create(
+    patient_id: str,
+    body: RxCreateRequest,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> RxCreateResult:
+    patient = await _load_patient(session, patient_id)
+    grant = await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+
+    # Guardrail: a line marked as coming from history must actually be in the record.
+    documented = rx.candidate_names(records)
+    for m in body.medications:
+        if m.origin == "history" and m.name.strip().lower() not in documented:
+            raise HTTPException(
+                422,
+                f"'{m.name}' is marked as from the patient's record but is not documented there.",
+            )
+
+    meds = [
+        {"name": m.name, "dose": m.dose, "route": m.route, "freq": m.freq}
+        for m in body.medications
+    ]
+    checks = rx.check(records, meds)
+
+    record = Record(
+        patient_id=patient.id,
+        type="prescription",
+        doc_date=body.doc_date or datetime.now(UTC).date(),
+        provider=f"Dr {doctor.name}"
+        + (f", {doctor.hospital}" if doctor.hospital else ""),
+        data={
+            "diagnoses": [],
+            "medications": meds,
+            "lab_results": [],
+            "allergies": [],
+            "notes": body.notes,
+        },
+        verified=True,
+        verified_by=doctor.user_id,
+        verified_at=datetime.now(UTC),
+        authored_by_doctor_id=doctor.id,
+    )
+    session.add(record)
+    await acc.log(
+        session,
+        patient_id=patient.id,
+        actor_id=doctor.user_id,
+        actor_role="doctor",
+        doctor_id=doctor.id,
+        action=AuditAction.prescribe.value,
+        scope=grant.scope,
+        meta={
+            "lines": len(meds),
+            "from_history": sum(1 for m in body.medications if m.origin == "history"),
+            "warnings": [c["severity"] for c in checks],
+        },
+    )
+    await session.flush()
+    await notify_patient(
+        str(patient.id),
+        "New prescription",
+        f"Dr {doctor.name} added a prescription to your MediCard.",
+    )
+    await session.commit()
+
+    detail = RecordDetail(
+        record_id=str(record.id),
+        type=record.type,
+        doc_date=record.doc_date,
+        provider=record.provider,
+        verified=record.verified,
+        sensitive=record.sensitive,
+        created_at=record.created_at,
+        data=RecordData.model_validate(record.data),
+        source_url=None,
+        extraction=None,
+    )
+    return RxCreateResult(record=detail, checks=[RxCheck(**c) for c in checks])
 
 
 @router.post("/grants/{grant_id}/end", status_code=204)

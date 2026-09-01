@@ -6,7 +6,7 @@ import '../../theme.dart';
 import '../access/access_repository.dart';
 import '../records/models.dart';
 
-final _recordsProvider = FutureProvider.autoDispose
+final doctorRecordsProvider = FutureProvider.autoDispose
     .family<List<RecordSummary>, String>((ref, pid) {
   return ref.watch(accessRepositoryProvider).patientRecords(pid);
 });
@@ -25,7 +25,7 @@ class DoctorPatientRecordsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final records = ref.watch(_recordsProvider(patientId));
+    final records = ref.watch(doctorRecordsProvider(patientId));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Patient record'),
@@ -42,19 +42,28 @@ class DoctorPatientRecordsScreen extends ConsumerWidget {
               style: TextStyle(fontSize: 12),
             ),
           ),
-          Row(
-            children: [
-              TextButton.icon(
-                onPressed: () => context.go('/doctor/patients/$patientId/ai'),
-                icon: const Icon(Icons.auto_awesome),
-                label: const Text('AI summary'),
-              ),
-              TextButton.icon(
-                onPressed: () => context.go('/doctor/patients/$patientId/critical'),
-                icon: const Icon(Icons.emergency_outlined),
-                label: const Text('Critical'),
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => context.go('/doctor/patients/$patientId/ai'),
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('AI summary'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.go('/doctor/patients/$patientId/prescribe'),
+                  icon: const Icon(Icons.edit_note),
+                  label: const Text('Prescribe'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.go('/doctor/patients/$patientId/critical'),
+                  icon: const Icon(Icons.emergency_outlined),
+                  label: const Text('Critical'),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: records.when(

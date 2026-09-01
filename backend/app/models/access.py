@@ -33,6 +33,7 @@ class AuditAction(enum.StrEnum):
     break_glass = "break_glass"
     revoke = "revoke"
     end = "end"
+    prescribe = "prescribe"
 
 
 class AccessRequest(Base, TimestampMixin):

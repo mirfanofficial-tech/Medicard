@@ -46,6 +46,12 @@ class Record(Base, TimestampMixin):
     # Points at the latest ExtractionJob; no FK to avoid a records<->jobs cycle.
     extraction_job_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
+    # Set when a doctor authored this record (e.g. wrote a prescription) rather
+    # than the patient uploading an external document.
+    authored_by_doctor_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("doctors.id", ondelete="SET NULL")
+    )
+
 
 class ExtractionJob(Base, TimestampMixin):
     __tablename__ = "extraction_jobs"

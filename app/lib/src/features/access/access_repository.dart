@@ -58,6 +58,38 @@ class AccessRepository {
     return AiAnswer.fromJson(Map<String, dynamic>.from(r.data as Map));
   }
 
+  Future<RxContext> prescribeContext(String patientId) async {
+    final r = await _dio.get('/doctor/patients/$patientId/prescribe/context');
+    return RxContext.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<List<RxCheck>> prescribeCheck(
+    String patientId,
+    List<Map<String, dynamic>> medications,
+  ) async {
+    final r = await _dio.post('/doctor/patients/$patientId/prescribe/check',
+        data: {'medications': medications});
+    return (r.data['checks'] as List)
+        .map((e) => RxCheck.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<List<RxCheck>> prescribeCreate(
+    String patientId, {
+    String? docDate,
+    required List<Map<String, dynamic>> medications,
+    String? notes,
+  }) async {
+    final r = await _dio.post('/doctor/patients/$patientId/prescribe', data: {
+      'doc_date': docDate,
+      'medications': medications,
+      'notes': notes,
+    });
+    return (r.data['checks'] as List? ?? [])
+        .map((e) => RxCheck.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
   // ---- patient ----
 
   Future<List<PendingRequest>> pendingRequests() async {

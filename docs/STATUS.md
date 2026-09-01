@@ -13,6 +13,7 @@ _The brief asked us to be honest about limits. This is that page._
 | Break-glass | Emergency access = critical fields only (allergies, current meds, conditions), reason required, logged, patient notified, **cannot** open the full record |
 | Audit | Every doctor read writes an audit row in the same transaction; patient sees the full history and every active grant |
 | AI | Advisory summary + grounded "Ask" — **never** recommends a drug or dose, every claim cites a source record, off-record questions are declined |
+| Prescription assistant | Doctor authors the prescription. The assistant pre-fills lines **only from the patient's own recorded medicines** and runs a deterministic allergy / interaction / duplicate-therapy check on the draft. No model is in the loop; nothing new is ever proposed; the doctor is named on the record |
 
 ## Not done yet (known gaps)
 
@@ -37,6 +38,12 @@ the next action. An AI that suggests the next prescription skips that step and l
 summarise-and-flag is both the rubric-safe choice and the lower-liability one — and it's still the
 useful part: the physician decides faster, with the whole picture and the risks called out, not
 blindly.
+
+The prescription assistant follows the same line. "Suggest according to patient history" is
+implemented as: pull up the medicines already documented for this patient so the doctor can renew
+them with one tap, and check whatever the doctor drafts for allergy conflicts, interactions and
+duplicates. It never introduces a medicine that isn't already in the record, and the checks are a
+plain rule engine, not a model. The doctor writes the prescription and is named on it.
 
 ## Next
 

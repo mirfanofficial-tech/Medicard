@@ -181,6 +181,25 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - **Still open:** offline write queue + text-only mode; QR scan; a guardian-approves-for-minor
   screen; real FCM device registration; Postgres/MinIO run; an Android device build.
 
+### Phase 6 — Prescription assistant (added 2026-09-01)  ✔ done
+Requested feature: "when a doctor writes a prescription, AI suggests according to patient history."
+Built as the **rubric-safe** version — the doctor authors, the assistant only surfaces what is
+already documented and checks the draft; it never proposes a new medicine (see §5).
+- `GET /doctor/patients/{id}/prescribe/context` (full grant) → the patient's **current
+  medications, taken verbatim from their own prescription records** (deduped, newest first, each
+  with `source_record_id`) + `known_allergies`.
+- `POST …/prescribe/check` {medications} → a **deterministic rule engine** (no model call):
+  allergy conflicts (curated drug-class map), class-pair interactions incl. draft-vs-meds-already-
+  on-record, and duplicate-therapy. Severities urgent / watch / info.
+- `POST …/prescribe` {medications[], notes?} → creates a `verified` `prescription` `Record`
+  (`authored_by_doctor_id`, provider "Dr …"), notifies the patient, writes `audit_log` `prescribe`.
+  Guardrail: any line marked `origin: "history"` whose drug isn't in the record → 422.
+- Migration `0004_rx_author` (records.authored_by_doctor_id). App: `PrescribeScreen` — allergy
+  banner, "from <patient>'s record" checklist that adds ticked lines to the draft, editable draft
+  rows + manual add, live checks panel, "you are the prescriber" line. Entry: "Prescribe" on the
+  doctor patient-records screen.
+- Backend `pytest` 37 (6 new). `ruff` clean. Smoke-tested over HTTP.
+
 ### Cross-cutting — security (throughout)
 - Every query in the doctor service layer is scoped by a verified `access_grant`; there is no
   endpoint returning unscoped patient records.
@@ -196,6 +215,9 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - Summary system prompt forbids prescriptions; we show the prompt in the appendix of the deck.
 - Structured outputs + citations mean every AI claim is traceable to a source record; an ungrounded
   answer is a bug, not a feature.
+- **Prescription assistant (Phase 6):** the model is not in the loop at all — the "suggestions"
+  are the patient's own recorded medicines (data lookup), and the safety checks are a deterministic
+  rule engine. The doctor is the author and is named on the record. Nothing new is ever proposed.
 - One sentence, said out loud in the pitch: _"AI output is advisory only — the licensed physician
   retains full prescribing authority and responsibility."_ Doubles as liability and DRAP framing.
 

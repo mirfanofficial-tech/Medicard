@@ -12,6 +12,7 @@ import 'features/doctor/ai_panel_screen.dart';
 import 'features/doctor/critical_summary_screen.dart';
 import 'features/doctor/doctor_record_detail_screen.dart';
 import 'features/doctor/patient_records_screen.dart';
+import 'features/doctor/prescribe_screen.dart';
 import 'features/doctor/request_access_screen.dart';
 import 'features/patient/access_history_screen.dart';
 import 'features/patient/access_requests_screen.dart';
@@ -76,6 +77,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/doctor/patients/:id/ai',
         builder: (_, s) => AiPanelScreen(patientId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/doctor/patients/:id/prescribe',
+        builder: (_, s) => PrescribeScreen(patientId: s.pathParameters['id']!),
       ),
       GoRoute(
         path: '/patient/access-requests',

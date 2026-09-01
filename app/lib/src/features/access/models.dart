@@ -147,6 +147,78 @@ class AiAnswer {
       );
 }
 
+class RxCandidate {
+  RxCandidate({
+    required this.name,
+    this.dose,
+    this.route,
+    this.freq,
+    required this.sourceRecordId,
+    this.sourceDate,
+  });
+
+  final String name;
+  final String? dose;
+  final String? route;
+  final String? freq;
+  final String sourceRecordId;
+  final String? sourceDate;
+
+  factory RxCandidate.fromJson(Map<String, dynamic> j) => RxCandidate(
+        name: j['name'] as String? ?? '',
+        dose: j['dose'] as String?,
+        route: j['route'] as String?,
+        freq: j['freq'] as String?,
+        sourceRecordId: j['source_record_id'] as String? ?? '',
+        sourceDate: j['source_date'] as String?,
+      );
+}
+
+class RxContext {
+  RxContext({
+    required this.patientName,
+    required this.candidates,
+    required this.knownAllergies,
+    required this.assistantNote,
+  });
+
+  final String patientName;
+  final List<RxCandidate> candidates;
+  final List<String> knownAllergies;
+  final String assistantNote;
+
+  factory RxContext.fromJson(Map<String, dynamic> j) => RxContext(
+        patientName: j['patient_name'] as String? ?? '',
+        candidates: (j['candidates'] as List? ?? [])
+            .map((e) => RxCandidate.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        knownAllergies:
+            (j['known_allergies'] as List? ?? []).map((e) => e.toString()).toList(),
+        assistantNote: j['assistant_note'] as String? ?? '',
+      );
+}
+
+class RxCheck {
+  RxCheck({
+    required this.kind,
+    required this.severity,
+    required this.message,
+    required this.drugs,
+  });
+
+  final String kind; // allergy | interaction | duplicate
+  final String severity; // urgent | watch | info
+  final String message;
+  final List<String> drugs;
+
+  factory RxCheck.fromJson(Map<String, dynamic> j) => RxCheck(
+        kind: j['kind'] as String? ?? '',
+        severity: j['severity'] as String? ?? 'info',
+        message: j['message'] as String? ?? '',
+        drugs: (j['drugs'] as List? ?? []).map((e) => e.toString()).toList(),
+      );
+}
+
 class CriticalView {
   CriticalView({
     required this.patientName,
