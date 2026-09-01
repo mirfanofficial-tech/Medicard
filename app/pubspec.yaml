@@ -13,6 +13,9 @@ dependencies:
   go_router: ^14.2.7
   dio: ^5.7.0
   flutter_secure_storage: ^9.2.2
+  image_picker: ^1.1.2
+  file_picker: ^8.1.2
+  http_parser: ^4.0.2
 
 dev_dependencies:
   flutter_test:

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 
@@ -55,25 +56,26 @@ class PatientHomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-          const _ComingSoon('Upload a prescription or report (Phase 2)'),
-          const _ComingSoon('Your timeline (Phase 2)'),
-          const _ComingSoon('Access requests & history (Phase 3)'),
+          FilledButton.icon(
+            onPressed: () => context.go('/patient/records'),
+            icon: const Icon(Icons.folder_shared),
+            label: const Text('My records & timeline'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/patient/records/upload'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            icon: const Icon(Icons.add_a_photo),
+            label: const Text('Add a prescription or report'),
+          ),
+          const SizedBox(height: 24),
+          const ListTile(
+            leading: Icon(Icons.lock_clock_outlined),
+            title: Text('Access requests & history (Phase 3)'),
+            dense: true,
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.lock_clock_outlined),
-      title: Text(label),
-      dense: true,
     );
   }
 }

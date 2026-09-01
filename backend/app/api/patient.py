@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,21 +7,9 @@ from app.db import get_session
 from app.models import Patient
 from app.schemas.auth import MinorCreate, PatientSummary
 from app.services.medicard_code import generate_unique_code
+from app.services.patients import self_patient as _self_patient
 
 router = APIRouter(prefix="/patient", tags=["patient"])
-
-
-async def _self_patient(session: AsyncSession, user_id) -> Patient:
-    patient = (
-        await session.execute(
-            select(Patient).where(
-                Patient.user_id == user_id, Patient.guardian_patient_id.is_(None)
-            )
-        )
-    ).scalar_one_or_none()
-    if patient is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient profile missing")
-    return patient
 
 
 @router.get("/profiles", response_model=list[PatientSummary])

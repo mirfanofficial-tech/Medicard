@@ -36,8 +36,12 @@ flutter run                    # pick a device; -d chrome works for quick iterat
 
 - Phase 0 (setup) — done.
 - Phase 1 (identity & auth) — done: patient phone-OTP, doctor register/login + licence-review
-  queue, guardian minors, lost-code recovery. Backend `pytest` (14) + app `flutter test` (3) green.
-- Next: Phase 2 — record upload → Claude extraction → confirmation screen.
+  queue, guardian minors, lost-code recovery.
+- Phase 2 (records) — done: upload → Claude extraction (`claude-sonnet-5`, JSON schema,
+  per-field confidence) → human confirmation screen → verified/unverified timeline, sensitive
+  toggle. Set `FAKE_EXTRACTION=true` (or leave `ANTHROPIC_API_KEY` blank) to run it without Claude.
+- Backend `pytest` (19) + app `flutter test` (3) green.
+- Next: Phase 3 — consent-gated doctor access + break-glass + access history.
 
-Docker Desktop was down during Phase 1, so the stack has been exercised against SQLite. Bring up
-`infra/docker-compose.yml` for the Postgres path.
+Docker Desktop has been down throughout, so the stack has been exercised against SQLite +
+`STORAGE_BACKEND=local`. Bring up `infra/docker-compose.yml` for the Postgres + MinIO path.

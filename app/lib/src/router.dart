@@ -8,6 +8,10 @@ import 'features/doctor/doctor_home_screen.dart';
 import 'features/landing/landing_screen.dart';
 import 'features/patient/patient_auth_screen.dart';
 import 'features/patient/patient_home_screen.dart';
+import 'features/records/extraction_review_screen.dart';
+import 'features/records/record_detail_screen.dart';
+import 'features/records/timeline_screen.dart';
+import 'features/records/upload_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
@@ -34,6 +38,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/', builder: (_, __) => const LandingScreen()),
       GoRoute(path: '/patient/auth', builder: (_, __) => const PatientAuthScreen()),
       GoRoute(path: '/patient', builder: (_, __) => const PatientHomeScreen()),
+      GoRoute(path: '/patient/records', builder: (_, __) => const TimelineScreen()),
+      GoRoute(path: '/patient/records/upload', builder: (_, __) => const UploadScreen()),
+      GoRoute(
+        path: '/patient/records/:id/review',
+        builder: (_, s) => ExtractionReviewScreen(recordId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/patient/records/:id',
+        builder: (_, s) => RecordDetailScreen(recordId: s.pathParameters['id']!),
+      ),
       GoRoute(path: '/doctor/auth', builder: (_, __) => const DoctorAuthScreen()),
       GoRoute(path: '/doctor', builder: (_, __) => const DoctorHomeScreen()),
     ],

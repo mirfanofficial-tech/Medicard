@@ -106,16 +106,26 @@ Roughly 8–10 working days. Each phase ends with something demoable.
 - Endpoints proven end-to-end over HTTP; `pytest` (14) + `ruff` + `flutter analyze` + `flutter
   test` (3) all green. Initial Alembic migration `0001_initial` verified up+down.
 
-### Phase 2 — Records: upload → AI extraction → confirmation (Days 3–5)
-- Upload screen: camera / gallery / PDF picker → compress → `POST /records/upload` → MinIO.
-- `POST /records/{id}/extract` (backend): send the file to `claude-sonnet-5` as a `document` block
-  with a structured-output schema; return fields + `confidence_by_field`; write an `extraction_job`
-  with `status: needs_review`.
-- **Extraction review screen:** every field shown with a confidence badge; inline edit; "Confirm"
-  writes the canonical `record` with `verified: true`. Unconfirmed data stays `verified: false` and
-  renders with an amber "Unverified" tag wherever it appears.
-- Patient timeline: chronological records, type filters, sensitive entries collapsed by default with
-  tap-to-reveal + confirm.
+### Phase 2 — Records: upload → AI extraction → confirmation (Days 3–5)  ✔ done
+- Upload screen: camera / gallery / PDF picker → `POST /records/upload` → storage (MinIO in prod;
+  local-fs backend for dev/tests). 12 MB cap, JPEG/PNG/PDF only. ✔
+- `POST /records/{id}/extract`: sends the file to `claude-sonnet-5` as an `image`/`document` block,
+  parses a strict JSON schema (`type`, `doc_date`, `provider`, `data{…}`, `confidence_by_field`
+  with dotted paths). Writes an `extraction_job` → `needs_review`; low-confidence fields flagged.
+  `FAKE_EXTRACTION` / missing key → deterministic stub so the flow runs offline. ✔
+- **Extraction review screen:** amber "nothing saved yet" banner; every section editable
+  (diagnoses / medications / labs / allergies / notes); low-confidence fields carry a "please
+  check" chip. "Confirm & save as verified" writes the canonical record (`verified: true`,
+  `verified_by`, `verified_at`) and closes the job. ✔
+- Timeline: reverse-chronological, per-type icons, `ProvenanceTag` (green Verified / amber
+  Unverified) on every row, hidden-by-default marker. Record detail shows the data, a
+  hidden-by-default toggle (`sensitive`), and the source object URL. ✔
+- Guardrails: extraction runs only in the backend; the system prompt forbids inferring diagnoses
+  or doses and requires low-confidence marking; no record is canonical without a human confirm.
+- Backend `pytest` 19, `ruff` clean, migration `0002_records` verified up+down, full flow
+  smoke-tested over HTTP. App `flutter analyze` + `flutter test` (3) green.
+- Deferred: image compression before upload, type filters on the timeline, presigned-URL image
+  preview widget (URL is returned, not yet rendered).
 
 ### Phase 3 — Consent-gated doctor access (Days 5–7)
 - Doctor enters code / scans QR → `POST /doctor/access-requests` → FCM push to patient.

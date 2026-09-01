@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import pytest
 import pytest_asyncio
@@ -9,6 +10,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ENV", "dev")
 os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
 os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
+os.environ.setdefault("STORAGE_BACKEND", "local")
+os.environ.setdefault("STORAGE_LOCAL_DIR", tempfile.mkdtemp(prefix="medicard-test-store-"))
+os.environ.setdefault("FAKE_EXTRACTION", "true")
 
 from app.db import get_session  # noqa: E402
 from app.main import app  # noqa: E402

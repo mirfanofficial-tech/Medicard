@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     otp_ttl_min: int = 5
     otp_max_attempts: int = 5
 
+    storage_backend: str = "s3"  # "s3" | "local"
+    storage_local_dir: str = "./_storage"
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "medicard"
     s3_secret_key: str = "medicard123"
@@ -30,6 +32,9 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-5"
+    # When true (or when no API key is set), extraction returns a deterministic
+    # stub instead of calling Claude — keeps the flow demoable offline.
+    fake_extraction: bool = False
 
     grant_ttl_hours: int = 12
 
