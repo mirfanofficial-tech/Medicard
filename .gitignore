@@ -1,0 +1,37 @@
+# ---- Python / backend ----
+backend/.venv/
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.mypy_cache/
+*.egg-info/
+
+# ---- Env / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Flutter / app ----
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.idea/
+app/android/.gradle/
+app/android/local.properties
+app/ios/Pods/
+app/ios/.symlinks/
+app/**/GeneratedPluginRegistrant.*
+*.iml
+
+# ---- Editor / OS ----
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Data / volumes ----
+infra/volumes/
+backend/*.db
+*.log
