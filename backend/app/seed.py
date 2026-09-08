@@ -27,7 +27,7 @@ from app.models import (
 )
 from app.services.medicard_code import generate_unique_code
 
-DOCTOR_EMAIL = "demo.doctor@medicard.test"
+DOCTOR_EMAIL = "sara.ahmed@medicard-demo.com"
 DOCTOR_PASSWORD = "demodemo123"
 PATIENT_PHONE = "+923001112222"
 
@@ -116,6 +116,9 @@ async def seed() -> None:
             name="Ayesha Khan",
             dob=date(1979, 4, 12),
             phone=PATIENT_PHONE,
+            gender="Female",
+            blood_group="O+",
+            address="12 Jail Road, Lahore",
             medicard_code=await generate_unique_code(session),
         )
         session.add(patient)

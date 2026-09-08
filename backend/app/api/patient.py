@@ -13,10 +13,22 @@ from app.models import (
     AuditLog,
     Doctor,
     Patient,
+    Record,
 )
 from app.schemas.access import AuditEntryView, GrantView, PendingRequestView
+from app.schemas.ai import AiSummary
 from app.schemas.auth import MinorCreate, PatientSummary
+from app.schemas.patient import (
+    AllergyItem,
+    DerivedMedication,
+    PatientMe,
+    PatientMeUpdate,
+    PatientOverview,
+    RecentRecord,
+)
 from app.services import access as acc
+from app.services import ai_summary as ai
+from app.services import prescribe as rx
 from app.services.medicard_code import generate_unique_code
 from app.services.patients import self_patient as _self_patient
 
@@ -238,3 +250,127 @@ async def access_history(
             )
         )
     return out
+
+
+# ---- profile: me / update ----
+
+
+def _me_view(p: Patient) -> PatientMe:
+    return PatientMe(
+        patient_id=str(p.id),
+        name=p.name,
+        medicard_code=p.medicard_code,
+        phone=p.phone,
+        dob=p.dob,
+        gender=p.gender,
+        blood_group=p.blood_group,
+        address=p.address,
+    )
+
+
+@router.get("/me", response_model=PatientMe)
+async def get_me(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> PatientMe:
+    return _me_view(await _self_patient(session, principal.user_id))
+
+
+@router.patch("/me", response_model=PatientMe)
+async def update_me(
+    body: PatientMeUpdate,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> PatientMe:
+    me = await _self_patient(session, principal.user_id)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(me, field, value.strip() if isinstance(value, str) else value)
+    await session.commit()
+    return _me_view(me)
+
+
+# ---- home overview + derived health lists ----
+
+
+async def _own_records(session: AsyncSession, patient_id: uuid.UUID) -> list[Record]:
+    return list(
+        (
+            await session.execute(
+                select(Record)
+                .where(Record.patient_id == patient_id)
+                .order_by(
+                    Record.doc_date.is_(None),
+                    Record.doc_date.desc(),
+                    Record.created_at.desc(),
+                )
+            )
+        ).scalars().all()
+    )
+
+
+@router.get("/overview", response_model=PatientOverview)
+async def overview(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> PatientOverview:
+    me = await _self_patient(session, principal.user_id)
+    records = await _own_records(session, me.id)
+    by_type = {t: 0 for t in ("lab", "prescription", "imaging", "note")}
+    for r in records:
+        by_type[r.type] = by_type.get(r.type, 0) + 1
+    return PatientOverview(
+        name=me.name,
+        records=len(records),
+        lab_reports=by_type["lab"],
+        prescriptions=by_type["prescription"],
+        imaging=by_type["imaging"],
+        medications=len(rx.current_medications(records)),
+        allergies=len(rx.known_allergies(records)),
+        recent=[
+            RecentRecord(
+                record_id=str(r.id),
+                type=r.type,
+                provider=r.provider,
+                doc_date=r.doc_date,
+                verified=r.verified,
+                created_at=r.created_at,
+            )
+            for r in records[:5]
+        ],
+    )
+
+
+@router.get("/medications", response_model=list[DerivedMedication])
+async def medications(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> list[DerivedMedication]:
+    me = await _self_patient(session, principal.user_id)
+    records = await _own_records(session, me.id)
+    return [DerivedMedication(**m) for m in rx.current_medications(records)]
+
+
+@router.get("/allergies", response_model=list[AllergyItem])
+async def allergies(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> list[AllergyItem]:
+    me = await _self_patient(session, principal.user_id)
+    records = await _own_records(session, me.id)
+    by_name: dict[str, list[str]] = {}
+    for r in records:
+        for a in (r.data or {}).get("allergies", []) or []:
+            by_name.setdefault(str(a), []).append(str(r.id))
+    return [AllergyItem(name=n, source_record_ids=ids) for n, ids in sorted(by_name.items())]
+
+
+@router.get("/ai-summary", response_model=AiSummary)
+async def my_ai_summary(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> AiSummary:
+    """Advisory summary of the patient's own records. Same guardrails as the
+    doctor-facing summary — it never recommends a treatment or a prescription."""
+    me = await _self_patient(session, principal.user_id)
+    records = await _own_records(session, me.id)
+    return AiSummary(**await ai.summarize(records))
