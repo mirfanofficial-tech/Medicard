@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medicard/src/app.dart';
@@ -34,27 +34,27 @@ Widget _app() => ProviderScope(
     );
 
 void main() {
-  testWidgets('landing screen offers both roles', (tester) async {
+  testWidgets('landing screen offers get-started and a doctor path', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
     expect(find.text('MediCard'), findsOneWidget);
-    expect(find.text("I'm a patient"), findsOneWidget);
+    expect(find.text('Get Started'), findsOneWidget);
     expect(find.text("I'm a doctor"), findsOneWidget);
   });
 
-  testWidgets('patient button opens the OTP sign-in screen', (tester) async {
+  testWidgets('Get Started opens the phone OTP sign-in', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text("I'm a patient"));
+    await tester.tap(find.text('Get Started'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Patient sign in'), findsOneWidget);
     expect(find.text('Send code'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Phone number'), findsOneWidget);
   });
 
-  testWidgets('doctor button opens registration with the licence-review notice',
+  testWidgets('doctor path opens registration with the licence-review notice',
       (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();

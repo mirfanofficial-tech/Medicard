@@ -75,7 +75,7 @@ class _State extends ConsumerState<ExtractionReviewScreen> {
             data: _data!,
           );
       ref.invalidate(recordsListProvider);
-      if (mounted) context.go('/patient/records/${widget.recordId}');
+      if (mounted) context.pushReplacement('/patient/records/${widget.recordId}');
     } on DioException catch (e) {
       setState(() => _error = e.response?.data?['detail']?.toString() ?? 'Could not save');
     } finally {
@@ -87,8 +87,10 @@ class _State extends ConsumerState<ExtractionReviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Check the details'),
-        leading: BackButton(onPressed: () => context.go('/patient/records')),
+        title: const Text('Review & Confirm'),
+        leading: BackButton(
+          onPressed: () => context.canPop() ? context.pop() : context.go('/patient/records'),
+        ),
       ),
       body: SafeArea(
         child: _loading

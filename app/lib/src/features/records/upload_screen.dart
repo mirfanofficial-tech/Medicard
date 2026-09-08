@@ -7,10 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../theme.dart';
+import '../../ui/widgets.dart';
 import 'records_repository.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
-  const UploadScreen({super.key});
+  const UploadScreen({super.key, this.asTab = true});
+
+  final bool asTab;
 
   @override
   ConsumerState<UploadScreen> createState() => _UploadScreenState();
@@ -39,7 +43,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             contentType: p.contentType,
           );
       ref.invalidate(recordsListProvider);
-      if (mounted) context.go('/patient/records/$id/review');
+      if (mounted) context.push('/patient/records/$id/review');
     } on DioException catch (e) {
       setState(() => _error = e.response?.data?['detail']?.toString() ?? 'Upload failed');
     } catch (e) {
@@ -84,37 +88,75 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add a record'),
-        leading: BackButton(onPressed: () => context.go('/patient/records')),
+        title: const Text('Upload Record'),
+        automaticallyImplyLeading: !widget.asTab,
+        leading: widget.asTab ? null : BackButton(onPressed: () => context.go('/patient/records')),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           children: [
-            const Text(
-              'Photograph a prescription or report. We extract the details, then you '
-              'confirm them before anything is saved.',
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _handle(() => _fromImagePicker(ImageSource.camera)),
-              icon: const Icon(Icons.photo_camera),
-              label: const Text('Take a photo'),
+            InkWell(
+              onTap: _busy ? null : () => _handle(() => _fromImagePicker(ImageSource.camera)),
+              borderRadius: BorderRadius.circular(16),
+              child: DottedCard(
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: MediCardColors.primaryTint,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.photo_camera_outlined,
+                          color: MediCardColors.primary, size: 28),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Tap to take a photo',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: MediCardColors.ink)),
+                    const SizedBox(height: 4),
+                    const Text('of a prescription, lab report\nor any medical document',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: MediCardColors.muted)),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed:
                   _busy ? null : () => _handle(() => _fromImagePicker(ImageSource.gallery)),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              icon: const Icon(Icons.photo_library),
-              label: const Text('Choose an image'),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Choose from Gallery'),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _handle(_fromFiles),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              icon: const Icon(Icons.picture_as_pdf),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
               label: const Text('Choose a PDF'),
+            ),
+            const SizedBox(height: 20),
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tips for best results',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    SizedBox(height: 10),
+                    _Tip('Use clear lighting'),
+                    _Tip('Capture the entire document'),
+                    _Tip('Avoid blur and shadows'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const InfoBanner(
+              'We extract the details, then you confirm them before anything is saved as '
+              'part of your record.',
             ),
             if (_busy) ...[
               const SizedBox(height: 24),
@@ -130,6 +172,38 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _Tip extends StatelessWidget {
+  const _Tip(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          const Icon(Icons.check_circle, size: 16, color: MediCardColors.success),
+          const SizedBox(width: 8),
+          Text(text),
+        ]),
+      );
+}
+
+class DottedCard extends StatelessWidget {
+  const DottedCard({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+      decoration: BoxDecoration(
+        color: MediCardColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MediCardColors.primary.withOpacity(0.4), width: 1.5),
+      ),
+      child: child,
     );
   }
 }

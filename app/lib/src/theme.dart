@@ -61,7 +61,7 @@ ThemeData buildMediCardTheme() {
       ),
       iconTheme: IconThemeData(color: MediCardColors.ink),
     ),
-    cardTheme: CardThemeData(
+    cardTheme: CardTheme(
       color: MediCardColors.surface,
       elevation: 0,
       margin: EdgeInsets.zero,
