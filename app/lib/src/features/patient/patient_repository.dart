@@ -129,38 +129,142 @@ class PatientRepository {
   PatientRepository(this._dio);
   final Dio _dio;
 
+  // The deployed server may predate the patient-redesign endpoints; on a
+  // 404/405 we derive the same views client-side from /auth/me and /records.
+  static bool _missing(Object e) =>
+      e is DioException && (e.response?.statusCode == 404 || e.response?.statusCode == 405);
+
   Future<PatientProfile> me() async {
-    final r = await _dio.get('/patient/me');
-    return PatientProfile.fromJson(Map<String, dynamic>.from(r.data as Map));
+    try {
+      final r = await _dio.get('/patient/me');
+      return PatientProfile.fromJson(Map<String, dynamic>.from(r.data as Map));
+    } catch (e) {
+      if (!_missing(e)) rethrow;
+      final r = await _dio.get('/auth/me');
+      final profile = Map<String, dynamic>.from((r.data as Map)['profile'] as Map? ?? {});
+      return PatientProfile.fromJson(profile);
+    }
   }
 
   Future<PatientProfile> updateMe(Map<String, dynamic> patch) async {
-    final r = await _dio.patch('/patient/me', data: patch);
-    return PatientProfile.fromJson(Map<String, dynamic>.from(r.data as Map));
+    try {
+      final r = await _dio.patch('/patient/me', data: patch);
+      return PatientProfile.fromJson(Map<String, dynamic>.from(r.data as Map));
+    } catch (e) {
+      if (_missing(e)) {
+        throw Exception('Profile editing is not available on this server yet.');
+      }
+      rethrow;
+    }
+  }
+
+  /// Verified records, newest first, with full detail (fallback path only).
+  Future<List<Map<String, dynamic>>> _verifiedDetails() async {
+    final list = await _dio.get('/records');
+    final rows = (list.data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where((e) => e['verified'] == true)
+        .toList();
+    final out = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final d = await _dio.get('/records/${row['record_id']}');
+      out.add(Map<String, dynamic>.from(d.data as Map));
+    }
+    return out;
+  }
+
+  List<DerivedMed> _meds(List<Map<String, dynamic>> records) {
+    final seen = <String>{};
+    final out = <DerivedMed>[];
+    for (final r in records.where((r) => r['type'] == 'prescription')) {
+      final data = Map<String, dynamic>.from(r['data'] as Map? ?? {});
+      for (final m in (data['medications'] as List? ?? [])) {
+        final mm = Map<String, dynamic>.from(m as Map);
+        final name = (mm['name'] as String? ?? '').trim();
+        if (name.isEmpty || !seen.add(name.toLowerCase())) continue;
+        out.add(DerivedMed(
+          name: name,
+          dose: mm['dose'] as String?,
+          route: mm['route'] as String?,
+          freq: mm['freq'] as String?,
+          sourceDate: r['doc_date'] as String?,
+        ));
+      }
+    }
+    return out;
+  }
+
+  List<AllergyItem> _allergies(List<Map<String, dynamic>> records) {
+    final byName = <String, List<String>>{};
+    for (final r in records) {
+      final data = Map<String, dynamic>.from(r['data'] as Map? ?? {});
+      for (final a in (data['allergies'] as List? ?? [])) {
+        byName.putIfAbsent(a.toString(), () => []).add(r['record_id'].toString());
+      }
+    }
+    final names = byName.keys.toList()..sort();
+    return [for (final n in names) AllergyItem(name: n, sourceRecordIds: byName[n]!)];
   }
 
   Future<Overview> overview() async {
-    final r = await _dio.get('/patient/overview');
-    return Overview.fromJson(Map<String, dynamic>.from(r.data as Map));
+    try {
+      final r = await _dio.get('/patient/overview');
+      return Overview.fromJson(Map<String, dynamic>.from(r.data as Map));
+    } catch (e) {
+      if (!_missing(e)) rethrow;
+      final name = (await me()).name;
+      final rows = ((await _dio.get('/records')).data as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      int count(String t) => rows.where((r) => r['type'] == t).length;
+      final details = await _verifiedDetails();
+      return Overview(
+        name: name,
+        records: rows.length,
+        labReports: count('lab'),
+        prescriptions: count('prescription'),
+        imaging: count('imaging'),
+        medications: _meds(details).length,
+        allergies: _allergies(details).length,
+        recent: rows.take(5).map(RecentRecord.fromJson).toList(),
+      );
+    }
   }
 
   Future<List<DerivedMed>> medications() async {
-    final r = await _dio.get('/patient/medications');
-    return (r.data as List)
-        .map((e) => DerivedMed.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    try {
+      final r = await _dio.get('/patient/medications');
+      return (r.data as List)
+          .map((e) => DerivedMed.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      if (!_missing(e)) rethrow;
+      return _meds(await _verifiedDetails());
+    }
   }
 
   Future<List<AllergyItem>> allergies() async {
-    final r = await _dio.get('/patient/allergies');
-    return (r.data as List)
-        .map((e) => AllergyItem.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    try {
+      final r = await _dio.get('/patient/allergies');
+      return (r.data as List)
+          .map((e) => AllergyItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      if (!_missing(e)) rethrow;
+      return _allergies(await _verifiedDetails());
+    }
   }
 
   Future<AiSummary> aiSummary() async {
-    final r = await _dio.get('/patient/ai-summary');
-    return AiSummary.fromJson(Map<String, dynamic>.from(r.data as Map));
+    try {
+      final r = await _dio.get('/patient/ai-summary');
+      return AiSummary.fromJson(Map<String, dynamic>.from(r.data as Map));
+    } catch (e) {
+      if (_missing(e)) {
+        throw Exception('AI summary is not available on this server yet.');
+      }
+      rethrow;
+    }
   }
 }
 
