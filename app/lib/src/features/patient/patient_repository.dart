@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../access/models.dart' show AiSummary;
+import '../care/care_models.dart';
 
 class PatientProfile {
   PatientProfile({
@@ -255,6 +256,26 @@ class PatientRepository {
     }
   }
 
+  Future<PatientHome> home() async {
+    final r = await _dio.get('/patient/home');
+    return PatientHome.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<CarePlanData> carePlan() async {
+    final r = await _dio.get('/patient/care-plan');
+    return CarePlanData.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<TodayView> logCare(String itemKey, bool done) async {
+    final r = await _dio.post('/patient/care/log', data: {'item_key': itemKey, 'done': done});
+    return TodayView.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<PatientAnswer> ask(String question) async {
+    final r = await _dio.post('/patient/ask', data: {'question': question});
+    return PatientAnswer.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
   Future<AiSummary> aiSummary() async {
     try {
       final r = await _dio.get('/patient/ai-summary');
@@ -285,3 +306,9 @@ final patientAllergiesProvider = FutureProvider.autoDispose<List<AllergyItem>>(
 
 final patientAiSummaryProvider = FutureProvider.autoDispose<AiSummary>(
     (ref) => ref.watch(patientRepositoryProvider).aiSummary());
+
+final patientHomeProvider = FutureProvider.autoDispose<PatientHome>(
+    (ref) => ref.watch(patientRepositoryProvider).home());
+
+final carePlanProvider = FutureProvider.autoDispose<CarePlanData>(
+    (ref) => ref.watch(patientRepositoryProvider).carePlan());

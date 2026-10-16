@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/env.dart';
+import '../../core/language.dart';
+import '../../demo/demo_data.dart' show demoDictation;
+import '../../core/voice_input.dart';
 import '../../theme.dart';
 import '../access/access_repository.dart';
 import '../access/models.dart';
@@ -14,6 +18,7 @@ class _Line {
     this.dose = '',
     this.route = '',
     this.freq = '',
+    this.days = '',
     this.origin = 'manual',
     this.fromCandidateId,
   });
@@ -22,6 +27,7 @@ class _Line {
   String dose;
   String route;
   String freq;
+  String days;
   String origin; // manual | history
   String? fromCandidateId;
 
@@ -30,14 +36,18 @@ class _Line {
         'dose': dose.trim().isEmpty ? null : dose.trim(),
         'route': route.trim().isEmpty ? null : route.trim(),
         'freq': freq.trim().isEmpty ? null : freq.trim(),
+        'days': days.trim().isEmpty ? null : days.trim(),
         'origin': origin,
       };
 }
 
 class PrescribeScreen extends ConsumerStatefulWidget {
-  const PrescribeScreen({super.key, required this.patientId});
+  const PrescribeScreen({super.key, required this.patientId, this.initialDictation});
 
   final String patientId;
+
+  /// Text dictated on the overview screen, to be written into the draft on open.
+  final String? initialDictation;
 
   @override
   ConsumerState<PrescribeScreen> createState() => _State();
@@ -47,6 +57,15 @@ class _State extends ConsumerState<PrescribeScreen> {
   RxContext? _ctx;
   final List<_Line> _draft = [];
   final _notes = TextEditingController();
+  final _voice = VoiceInput();
+  final _dictation = TextEditingController();
+  final _dietNote = TextEditingController();
+  final _activity = TextEditingController();
+  final _followUp = TextEditingController();
+  List<String> _eatMore = [];
+  List<String> _eatLess = [];
+  List<({String name, int inDays})> _tests = [];
+  bool _parsing = false;
   List<RxCheck> _checks = [];
   bool _loading = true;
   bool _saving = false;
@@ -56,13 +75,85 @@ class _State extends ConsumerState<PrescribeScreen> {
   @override
   void initState() {
     super.initState();
+    _voice.addListener(() => mounted ? setState(() {}) : null);
     _load();
   }
 
   @override
   void dispose() {
-    _notes.dispose();
+    for (final c in [_notes, _dictation, _dietNote, _activity, _followUp]) {
+      c.dispose();
+    }
+    _voice.dispose();
     super.dispose();
+  }
+
+  Future<void> _parseDictation() async {
+    final text = _dictation.text.trim();
+    if (text.length < 3) return;
+    setState(() {
+      _parsing = true;
+      _error = null;
+    });
+    try {
+      final d = await _repo.voiceParse(text);
+      setState(() {
+        for (final m in d.meds) {
+          final exists = _draft.any((l) => l.name.toLowerCase() == m.name.toLowerCase());
+          if (exists) continue;
+          _draft.add(_Line(
+            name: m.name,
+            dose: m.dose ?? '',
+            freq: m.freq ?? '',
+            days: m.days ?? '',
+          ));
+        }
+        final note = [d.complaint, d.assessment, d.plan].whereType<String>().join(' ');
+        if (note.isNotEmpty && _notes.text.trim().isEmpty) _notes.text = note;
+        if (d.dietNote != null) {
+          _dietNote.text = d.dietNote!;
+          _eatMore = d.eatMore;
+          _eatLess = d.eatLess;
+        }
+        if (d.activity.isNotEmpty) _activity.text = d.activity.join(', ');
+        if (d.followUpDays != null) _followUp.text = '${d.followUpDays}';
+        if (d.tests.isNotEmpty) _tests = d.tests;
+      });
+      await _recheck();
+    } on DioException {
+      setState(() => _error = 'Could not write from your dictation. Please try again.');
+    } finally {
+      if (mounted) setState(() => _parsing = false);
+    }
+  }
+
+  Future<void> _mic() async {
+    if (_voice.listening) {
+      await _voice.stop();
+      await _parseDictation();
+      return;
+    }
+    await _voice.start(
+      urdu: ref.read(urduProvider),
+      onText: (t, _) => _dictation.text = t,
+    );
+  }
+
+  Map<String, dynamic>? get _advice {
+    final activity = _activity.text
+        .split(RegExp(r'[,\n]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final days = int.tryParse(_followUp.text.trim());
+    final diet = _dietNote.text.trim();
+    if (diet.isEmpty && activity.isEmpty && _tests.isEmpty && days == null) return null;
+    return {
+      'diet': diet.isEmpty ? null : {'note': diet, 'more': _eatMore, 'less': _eatLess},
+      'activity': activity,
+      'tests': [for (final t in _tests) {'name': t.name, 'in_days': t.inDays}],
+      'follow_up_days': days,
+    };
   }
 
   AccessRepository get _repo => ref.read(accessRepositoryProvider);
@@ -74,6 +165,11 @@ class _State extends ConsumerState<PrescribeScreen> {
         _ctx = c;
         _loading = false;
       });
+      final first = widget.initialDictation;
+      if (first != null && first.isNotEmpty && _dictation.text.isEmpty) {
+        _dictation.text = first;
+        await _parseDictation();
+      }
     } on DioException catch (e) {
       setState(() {
         _error = e.response?.data?['detail']?.toString() ?? 'Could not load';
@@ -135,6 +231,7 @@ class _State extends ConsumerState<PrescribeScreen> {
         widget.patientId,
         medications: _named,
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+        advice: _advice,
       );
       ref.invalidate(doctorRecordsProvider(widget.patientId));
       if (!mounted) return;
@@ -190,6 +287,12 @@ class _State extends ConsumerState<PrescribeScreen> {
         ),
         const SizedBox(height: 8),
         Text(ctx.assistantNote, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 14),
+        _dictationCard(),
+        if (ctx.historyAlerts.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _historyCard(ctx),
+        ],
         const Divider(height: 24),
 
         Text("From ${ctx.patientName.split(' ').first}'s record",
@@ -231,6 +334,8 @@ class _State extends ConsumerState<PrescribeScreen> {
           ),
         for (var i = 0; i < _draft.length; i++) _lineEditor(i),
 
+        const SizedBox(height: 14),
+        _adviceCard(),
         const SizedBox(height: 12),
         TextField(
           controller: _notes,
@@ -333,6 +438,35 @@ class _State extends ConsumerState<PrescribeScreen> {
                   ),
                 ),
             ]),
+            Row(children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: l.days,
+                  decoration: const InputDecoration(labelText: 'For how long', isDense: true),
+                  onChanged: (v) => l.days = v,
+                ),
+              ),
+            ]),
+            for (final c in _checks.where((c) =>
+                c.kind == 'reaction' &&
+                c.drugs.any((d) => d.toLowerCase() == l.name.trim().toLowerCase())))
+              Container(
+                margin: const EdgeInsets.only(top: 8, right: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  border: Border.all(color: const Color(0xFFFCD34D)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.warning_amber, size: 18, color: Color(0xFFB45309)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('From this patient\'s history: ${c.message}',
+                        style: const TextStyle(fontSize: 12.5, height: 1.4)),
+                  ),
+                ]),
+              ),
           ],
         ),
       ),
@@ -352,6 +486,7 @@ class _State extends ConsumerState<PrescribeScreen> {
           switch (c.kind) {
             'allergy' => Icons.dangerous,
             'interaction' => Icons.warning_amber,
+            'reaction' => Icons.history,
             _ => Icons.info_outline,
           },
           color: color,
@@ -360,6 +495,182 @@ class _State extends ConsumerState<PrescribeScreen> {
         subtitle: Text('${c.kind} · ${c.severity}'
             '${c.drugs.isNotEmpty ? ' · ${c.drugs.join(' + ')}' : ''}'),
       ),
+    );
+  }
+
+  Widget _dictationCard() {
+    final listening = _voice.listening;
+    final urdu = ref.watch(urduProvider);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MediCardColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          InkWell(
+            onTap: _mic,
+            customBorder: const CircleBorder(),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: listening ? MediCardColors.danger : MediCardColors.primary,
+              ),
+              child: Icon(listening ? Icons.stop : Icons.mic, color: Colors.white, size: 26),
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Tap and speak the prescription',
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+          ),
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('EN')),
+              ButtonSegment(value: true, label: Text('اردو')),
+            ],
+            selected: {urdu},
+            onSelectionChanged: (v) => ref.read(urduProvider.notifier).state = v.first,
+          ),
+        ]),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _dictation,
+          minLines: 2,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'e.g. “Metformin five hundred twice daily for thirty days… low sugar diet, '
+                'walk twenty minutes, review in two weeks.”',
+          ),
+        ),
+        if (_voice.error != null && !listening)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('${_voice.error!} You can type instead.',
+                style: const TextStyle(fontSize: 12, color: MediCardColors.danger)),
+          ),
+        if (Env.demo)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: ActionChip(
+              avatar: const Icon(Icons.bolt, size: 16),
+              label: const Text('Use sample dictation'),
+              onPressed: () => setState(() => _dictation.text = demoDictation),
+            ),
+          ),
+        const SizedBox(height: 10),
+        Row(children: [
+          FilledButton.icon(
+            onPressed: _parsing ? null : _parseDictation,
+            icon: const Icon(Icons.auto_fix_high, size: 18),
+            label: Text(_parsing ? 'Writing…' : 'Write it for me'),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 46)),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text('Only what you say is written. Check every line.',
+                style: TextStyle(fontSize: 12, color: MediCardColors.muted)),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _historyCard(RxContext ctx) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MediCardColors.primary, width: 1.5),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Her history at a glance',
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (final a in ctx.historyAlerts)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text.rich(TextSpan(children: [
+              TextSpan(
+                text: switch (a.kind) {
+                  'allergy' => 'Allergy',
+                  'reaction' => 'Past effect',
+                  _ => 'Stopped',
+                },
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: a.severity == 'urgent'
+                        ? MediCardColors.danger
+                        : a.severity == 'watch'
+                            ? MediCardColors.warning
+                            : MediCardColors.muted),
+              ),
+              TextSpan(text: ' · ${a.title}: ${a.text}  (${a.sourceLabel})'),
+            ]), style: const TextStyle(fontSize: 13, height: 1.4)),
+          ),
+      ]),
+    );
+  }
+
+  Widget _adviceCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: MediCardColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Expanded(
+            child: Text('Advice for the patient',
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800)),
+          ),
+          Text('Becomes their care plan',
+              style: TextStyle(
+                  fontSize: 12, color: MediCardColors.primary, fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _dietNote,
+          decoration: const InputDecoration(labelText: 'Diet', hintText: 'e.g. Low-sugar diet'),
+        ),
+        if (_eatMore.isNotEmpty || _eatLess.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Eat more: ${_eatMore.join(', ')}  ·  Eat less: ${_eatLess.join(', ')}',
+                style: const TextStyle(fontSize: 12, color: MediCardColors.muted, height: 1.4)),
+          ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _activity,
+          decoration: const InputDecoration(
+              labelText: 'Activity', hintText: 'e.g. Walk 20 minutes (comma separated)'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _followUp,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Follow-up in (days)', hintText: 'e.g. 14'),
+        ),
+        if (_tests.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(spacing: 8, children: [
+              for (final t in _tests)
+                InputChip(
+                  label: Text('${t.name} in ${t.inDays} days'),
+                  onDeleted: () => setState(() => _tests = _tests.where((x) => x != t).toList()),
+                ),
+            ]),
+          ),
+      ]),
     );
   }
 }

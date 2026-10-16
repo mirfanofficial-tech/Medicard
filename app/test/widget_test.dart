@@ -65,4 +65,26 @@ void main() {
     expect(find.text('Doctor registration'), findsOneWidget);
     expect(find.textContaining('reviewed against the licence register'), findsOneWidget);
   });
+
+  for (final size in const [Size(360, 740), Size(1280, 800)]) {
+    for (final route in const ['/patient/auth', '/doctor/auth']) {
+      testWidgets('$route renders without overflow at ${size.width.toInt()}px',
+          (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(_app());
+        await tester.pumpAndSettle();
+        final cta = find.text(route == '/patient/auth' ? 'Get Started' : "I'm a doctor");
+        await tester.ensureVisible(cta);
+        await tester.pumpAndSettle();
+        await tester.tap(cta);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(TextField), findsWidgets);
+      });
+    }
+  }
 }

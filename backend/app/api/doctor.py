@@ -1,8 +1,8 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_active_doctor
@@ -11,6 +11,9 @@ from app.models import (
     AccessGrant,
     AccessRequest,
     AuditAction,
+    AuditLog,
+    CareLog,
+    CarePlan,
     Doctor,
     Patient,
     Record,
@@ -24,6 +27,24 @@ from app.schemas.access import (
     GrantView,
 )
 from app.schemas.ai import AiAnswer, AiAskRequest, AiSummary
+from app.schemas.care import (
+    AssistantAsk,
+    DashActive,
+    DashActivity,
+    DashDay,
+    DashPending,
+    DashStats,
+    DoctorDashboard,
+    DoctorTip,
+    HistoryAlert,
+    LabRow,
+    OverviewCounts,
+    OverviewRecord,
+    PatientOverview,
+    Upcoming,
+    VoiceParseRequest,
+    VoiceParseResult,
+)
 from app.schemas.prescribe import (
     RxCandidate,
     RxCheck,
@@ -36,6 +57,7 @@ from app.schemas.prescribe import (
 from app.schemas.record import RecordData, RecordDetail, RecordSummary
 from app.services import access as acc
 from app.services import ai_summary as ai
+from app.services import care, voice
 from app.services import prescribe as rx
 from app.services.notify import notify_patient
 
@@ -355,6 +377,7 @@ async def prescribe_context(
         patient_name=patient.name,
         candidates=[RxCandidate(**c) for c in rx.current_medications(records)],
         known_allergies=rx.known_allergies(records),
+        history_alerts=[HistoryAlert(**a) for a in care.history_alerts(records)],
     )
 
 
@@ -369,7 +392,8 @@ async def prescribe_check(
     await acc.require_grant(session, doctor.id, patient.id, need_full=True)
     records = await _shared_records(session, patient.id)
     draft = [m.model_dump() for m in body.medications]
-    return RxCheckResult(checks=[RxCheck(**c) for c in rx.check(records, draft)])
+    found = rx.check(records, draft) + care.reaction_checks(records, draft)
+    return RxCheckResult(checks=[RxCheck(**c) for c in found])
 
 
 @router.post("/patients/{patient_id}/prescribe", response_model=RxCreateResult, status_code=201)
@@ -393,10 +417,10 @@ async def prescribe_create(
             )
 
     meds = [
-        {"name": m.name, "dose": m.dose, "route": m.route, "freq": m.freq}
+        {"name": m.name, "dose": m.dose, "route": m.route, "freq": m.freq, "days": m.days}
         for m in body.medications
     ]
-    checks = rx.check(records, meds)
+    checks = rx.check(records, meds) + care.reaction_checks(records, meds)
 
     record = Record(
         patient_id=patient.id,
@@ -417,6 +441,38 @@ async def prescribe_create(
         authored_by_doctor_id=doctor.id,
     )
     session.add(record)
+    await session.flush()
+
+    plan_created = False
+    adv = body.advice
+    if adv and (adv.diet or adv.activity or adv.tests or adv.follow_up_days):
+        today = care.local_now().date()
+        for old in (
+            await session.execute(
+                select(CarePlan).where(CarePlan.patient_id == patient.id, CarePlan.active.is_(True))
+            )
+        ).scalars():
+            old.active = False
+        session.add(
+            CarePlan(
+                patient_id=patient.id,
+                doctor_id=doctor.id,
+                record_id=record.id,
+                diet=adv.diet.model_dump() if adv.diet else {},
+                activity=adv.activity,
+                tests=[
+                    {"name": t.name, "due": (today + timedelta(days=t.in_days)).isoformat()}
+                    for t in adv.tests
+                ],
+                follow_up_date=(
+                    today + timedelta(days=adv.follow_up_days) if adv.follow_up_days else None
+                ),
+                notes=body.notes,
+                active=True,
+            )
+        )
+        plan_created = True
+
     await acc.log(
         session,
         patient_id=patient.id,
@@ -429,9 +485,9 @@ async def prescribe_create(
             "lines": len(meds),
             "from_history": sum(1 for m in body.medications if m.origin == "history"),
             "warnings": [c["severity"] for c in checks],
+            "care_plan": plan_created,
         },
     )
-    await session.flush()
     await notify_patient(
         str(patient.id),
         "New prescription",
@@ -451,7 +507,11 @@ async def prescribe_create(
         source_url=None,
         extraction=None,
     )
-    return RxCreateResult(record=detail, checks=[RxCheck(**c) for c in checks])
+    return RxCreateResult(
+        record=detail,
+        checks=[RxCheck(**c) for c in checks],
+        care_plan_created=plan_created,
+    )
 
 
 @router.post("/grants/{grant_id}/end", status_code=204)
@@ -469,3 +529,301 @@ async def end_my_grant(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Grant not found")
     await acc.end_grant(session, grant, doctor.user_id, "doctor")
     await session.commit()
+
+
+@router.post("/assistant/ask", response_model=AiAnswer)
+async def assistant_ask(
+    body: AssistantAsk,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> AiAnswer:
+    """The doctor's chat assistant. About one patient (needs a live grant, grounded in their
+    shared records, logged) — or, with no patient open, a pointer to open one."""
+    if not body.patient_id:
+        return AiAnswer(
+            answer="Open a patient's record (enter their MediCard code) and I can answer from it, "
+            "with sources.",
+            source_record_ids=[],
+            answered_from_records=False,
+            model="none",
+        )
+    patient = await _load_patient(session, body.patient_id)
+    grant = await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = await _shared_records(session, patient.id)
+    result = await ai.ask(records, body.question)
+    await acc.log(
+        session,
+        patient_id=patient.id,
+        actor_id=None,
+        actor_role="doctor",
+        doctor_id=doctor.id,
+        action=AuditAction.view.value,
+        scope=grant.scope,
+        meta={"view": "ai_ask", "model": result["model"], "question": body.question[:200]},
+    )
+    await session.commit()
+    return AiAnswer(**result)
+
+
+@router.post("/voice/parse", response_model=VoiceParseResult)
+async def voice_parse(
+    body: VoiceParseRequest,
+    doctor: Doctor = Depends(require_active_doctor),
+) -> VoiceParseResult:
+    """Format dictated text into a visit note, medicine lines and patient advice.
+
+    Deterministic: it only structures what the doctor said — it never adds a medicine,
+    dose or advice that was not spoken. Nothing is saved here.
+    """
+    return VoiceParseResult.model_validate(voice.parse(body.text))
+
+
+@router.get("/patients/{patient_id}/overview", response_model=PatientOverview)
+async def patient_overview(
+    patient_id: str,
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> PatientOverview:
+    patient = await _load_patient(session, patient_id)
+    grant = await acc.require_grant(session, doctor.id, patient.id, need_full=True)
+    records = [r for r in await _shared_records(session, patient.id) if r.verified]
+    now = care.local_now()
+
+    hidden = (
+        await session.execute(
+            select(func.count())
+            .select_from(Record)
+            .where(Record.patient_id == patient.id, Record.sensitive.is_(True))
+        )
+    ).scalar_one()
+    plans = list(
+        (await session.execute(select(CarePlan).where(CarePlan.patient_id == patient.id)))
+        .scalars()
+        .all()
+    )
+    plan = care.active_plan(plans)
+    logs = list(
+        (
+            await session.execute(
+                select(CareLog).where(
+                    CareLog.patient_id == patient.id,
+                    CareLog.log_date >= now.date() - timedelta(days=6),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    meds = rx.current_medications(records)
+    age = None
+    if patient.dob:
+        age = now.year - patient.dob.year - (
+            (now.month, now.day) < (patient.dob.month, patient.dob.day)
+        )
+
+    await acc.log(
+        session,
+        patient_id=patient.id,
+        actor_id=None,
+        actor_role="doctor",
+        doctor_id=doctor.id,
+        action=AuditAction.view.value,
+        scope=grant.scope,
+        meta={"view": "overview"},
+    )
+    await session.commit()
+
+    return PatientOverview(
+        patient_id=str(patient.id),
+        name=patient.name,
+        age=age,
+        gender=patient.gender,
+        blood_group=patient.blood_group,
+        medicard_code=patient.medicard_code,
+        address=patient.address,
+        conditions=care.conditions(records),
+        allergies=rx.known_allergies(records),
+        grant_expires_at=grant.expires_at.isoformat(),
+        history_alerts=[HistoryAlert(**a) for a in care.history_alerts(records)],
+        trends=care.trends(records),
+        records=[
+            OverviewRecord(
+                record_id=str(r.id),
+                type=r.type,
+                title=care.record_title(r),
+                sub=" · ".join(
+                    x for x in (r.doc_date.strftime("%d %b %Y") if r.doc_date else "", r.provider)
+                    if x
+                ),
+                verified=r.verified,
+                summary=care.record_summary(r),
+                date=r.doc_date.isoformat() if r.doc_date else None,
+            )
+            for r in records
+        ],
+        phone=patient.phone,
+        registered_on=patient.created_at.strftime("%d %b %Y") if patient.created_at else None,
+        last_updated=(
+            max(
+                (r.updated_at or r.created_at for r in records if (r.updated_at or r.created_at)),
+                default=None,
+            ).strftime("%d %b %Y")
+            if records
+            else None
+        ),
+        counts=OverviewCounts(
+            conditions=len(care.conditions(records)),
+            medications=len(meds),
+            allergies=len(rx.known_allergies(records)),
+            documents=len(records),
+            lab_tests=care.lab_test_count(records),
+        ),
+        latest_labs=[LabRow(**x) for x in care.lab_rows(records)],
+        upcoming=(
+            Upcoming(title="Follow-up", when=plan.follow_up_date.strftime("%d %b %Y"))
+            if plan and plan.follow_up_date
+            else None
+        ),
+        hidden_count=hidden,
+        medications=meds,
+        tips=care.doctor_tips(records, meds, now),
+        adherence=care.adherence(meds, plan, logs),
+        visits=care.visits(records),
+    )
+
+
+_ACTIVITY_TEXT = {
+    "request": "Requested access",
+    "grant": "Patient approved access",
+    "deny": "Patient declined access",
+    "break_glass": "Emergency access (critical info only)",
+    "revoke": "Patient revoked access",
+    "end": "You ended access",
+    "prescribe": "Prescription saved",
+}
+_VIEW_TEXT = {
+    "ai_summary": "Opened the AI summary",
+    "ai_ask": "Asked the AI about the record",
+    "overview": "Opened the patient overview",
+    "critical": "Viewed critical info",
+}
+
+
+@router.get("/dashboard", response_model=DoctorDashboard)
+async def dashboard(
+    doctor: Doctor = Depends(require_active_doctor),
+    session: AsyncSession = Depends(get_session),
+) -> DoctorDashboard:
+    now = acc.utcnow()
+    since30 = now - timedelta(days=30)
+    local = care.local_now()
+
+    grants = (
+        await session.execute(
+            select(AccessGrant, Patient)
+            .join(Patient, Patient.id == AccessGrant.patient_id)
+            .where(AccessGrant.doctor_id == doctor.id, AccessGrant.ended_at.is_(None))
+            .order_by(AccessGrant.granted_at.desc())
+        )
+    ).all()
+    live = [(g, p) for g, p in grants if acc.as_aware(g.expires_at) > now]
+
+    active: list[DashActive] = []
+    for g, p in live[:8]:
+        alerts: list[DoctorTip] = []
+        if g.scope == "full":
+            recs = [r for r in await _shared_records(session, p.id) if r.verified]
+            for a in care.history_alerts(recs):
+                if a["kind"] == "allergy":
+                    alerts.append(DoctorTip(severity="urgent", text=f"Allergy: {a['title']}"))
+            meds = rx.current_medications(recs)
+            for t in care.doctor_tips(recs, meds, local):
+                alerts.append(DoctorTip(**t))
+        age = None
+        if p.dob:
+            age = local.year - p.dob.year - ((local.month, local.day) < (p.dob.month, p.dob.day))
+        active.append(
+            DashActive(
+                grant_id=str(g.id),
+                patient_id=str(p.id),
+                patient_name=p.name,
+                age=age,
+                gender=p.gender,
+                scope=g.scope,
+                source=g.source,
+                expires_at=acc.as_aware(g.expires_at).isoformat(),
+                alerts=alerts[:3],
+            )
+        )
+
+    pending_rows = (
+        await session.execute(
+            select(AccessRequest, Patient)
+            .join(Patient, Patient.id == AccessRequest.patient_id)
+            .where(AccessRequest.doctor_id == doctor.id, AccessRequest.status == "pending")
+            .order_by(AccessRequest.created_at.desc())
+        )
+    ).all()
+
+    logs = list(
+        (
+            await session.execute(
+                select(AuditLog, Patient)
+                .join(Patient, Patient.id == AuditLog.patient_id)
+                .where(AuditLog.doctor_id == doctor.id, AuditLog.at >= since30)
+                .order_by(AuditLog.at.desc())
+            )
+        ).all()
+    )
+
+    week_days = [(local.date() - timedelta(days=i)) for i in range(6, -1, -1)]
+    buckets = {d: DashDay(day=d.strftime("%a")) for d in week_days}
+    for lg, _ in logs:
+        d = acc.as_aware(lg.at).astimezone(care.PKT).date()
+        if d in buckets:
+            if lg.action == AuditAction.view.value:
+                buckets[d].views += 1
+            elif lg.action == AuditAction.prescribe.value:
+                buckets[d].prescriptions += 1
+
+    activity = []
+    for lg, p in logs[:8]:
+        text = (
+            _VIEW_TEXT.get((lg.meta or {}).get("view", ""), "Viewed the records")
+            if lg.action == AuditAction.view.value
+            else _ACTIVITY_TEXT.get(lg.action, lg.action.title())
+        )
+        activity.append(
+            DashActivity(
+                at=acc.as_aware(lg.at).isoformat(),
+                action=lg.action,
+                patient_name=p.name.split(" ")[0],
+                text=text,
+            )
+        )
+
+    return DoctorDashboard(
+        name=doctor.name,
+        specialty=doctor.specialty,
+        hospital=doctor.hospital,
+        stats=DashStats(
+            active_access=len(live),
+            pending_requests=len(pending_rows),
+            prescriptions_30d=sum(1 for lg, _ in logs if lg.action == "prescribe"),
+            patients_seen_30d=len(
+                {lg.patient_id for lg, _ in logs if lg.action in ("view", "prescribe")}
+            ),
+            emergency_30d=sum(1 for lg, _ in logs if lg.action == "break_glass"),
+        ),
+        week=list(buckets.values()),
+        active=active,
+        pending=[
+            DashPending(
+                request_id=str(r.id),
+                patient_name=p.name.split(" ")[0],
+                created_at=acc.as_aware(r.created_at).isoformat(),
+            )
+            for r, p in pending_rows[:6]
+        ],
+        activity=activity,
+    )

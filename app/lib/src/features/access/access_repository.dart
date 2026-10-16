@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
+import '../care/care_models.dart';
 import '../records/models.dart';
 import 'models.dart';
 
@@ -79,15 +80,41 @@ class AccessRepository {
     String? docDate,
     required List<Map<String, dynamic>> medications,
     String? notes,
+    Map<String, dynamic>? advice,
   }) async {
     final r = await _dio.post('/doctor/patients/$patientId/prescribe', data: {
       'doc_date': docDate,
       'medications': medications,
       'notes': notes,
+      if (advice != null) 'advice': advice,
     });
     return (r.data['checks'] as List? ?? [])
         .map((e) => RxCheck.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  Future<PatientOverviewData> patientOverview(String patientId) async {
+    final r = await _dio.get('/doctor/patients/$patientId/overview');
+    return PatientOverviewData.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<DoctorDashboardData> dashboard() async {
+    final r = await _dio.get('/doctor/dashboard');
+    return DoctorDashboardData.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  /// The doctor's AI assistant: about one patient (needs their consent) or about the day.
+  Future<AiAnswer> assistantAsk(String question, {String? patientId}) async {
+    final r = await _dio.post('/doctor/assistant/ask', data: {
+      'question': question,
+      if (patientId != null) 'patient_id': patientId,
+    });
+    return AiAnswer.fromJson(Map<String, dynamic>.from(r.data as Map));
+  }
+
+  Future<VoiceDraft> voiceParse(String text) async {
+    final r = await _dio.post('/doctor/voice/parse', data: {'text': text});
+    return VoiceDraft.fromJson(Map<String, dynamic>.from(r.data as Map));
   }
 
   // ---- patient ----
@@ -144,3 +171,12 @@ final aiSummaryProvider =
     FutureProvider.autoDispose.family<AiSummary, String>((ref, patientId) {
   return ref.watch(accessRepositoryProvider).aiSummary(patientId);
 });
+
+final patientOverviewDataProvider = FutureProvider.autoDispose
+    .family<PatientOverviewData, String>((ref, patientId) {
+  return ref.watch(accessRepositoryProvider).patientOverview(patientId);
+});
+
+final doctorDashboardProvider = FutureProvider.autoDispose<DoctorDashboardData>(
+  (ref) => ref.watch(accessRepositoryProvider).dashboard(),
+);

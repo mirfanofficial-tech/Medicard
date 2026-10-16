@@ -1,7 +1,8 @@
 import uuid
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import Principal, require_patient
@@ -11,6 +12,8 @@ from app.models import (
     AccessRequest,
     AccessRequestStatus,
     AuditLog,
+    CareLog,
+    CarePlan,
     Doctor,
     Patient,
     Record,
@@ -18,6 +21,19 @@ from app.models import (
 from app.schemas.access import AuditEntryView, GrantView, PendingRequestView
 from app.schemas.ai import AiSummary
 from app.schemas.auth import MinorCreate, PatientSummary
+from app.schemas.care import (
+    CareLogRequest,
+    CarePlanView,
+    FollowUp,
+    NextMedicine,
+    PatientAnswer,
+    PatientAskRequest,
+    PatientHome,
+    ReportView,
+    SummaryView,
+    TipView,
+    TodayView,
+)
 from app.schemas.patient import (
     AllergyItem,
     DerivedMedication,
@@ -28,6 +44,7 @@ from app.schemas.patient import (
 )
 from app.services import access as acc
 from app.services import ai_summary as ai
+from app.services import care
 from app.services import prescribe as rx
 from app.services.medicard_code import generate_unique_code
 from app.services.patients import self_patient as _self_patient
@@ -374,3 +391,161 @@ async def my_ai_summary(
     me = await _self_patient(session, principal.user_id)
     records = await _own_records(session, me.id)
     return AiSummary(**await ai.summarize(records))
+
+
+# ---- the simple front page: next medicine, today's care, summary, reports, tips ----
+
+
+async def _plan_and_logs(
+    session: AsyncSession, patient_id: uuid.UUID, days: int = 1
+) -> tuple[CarePlan | None, list[CareLog]]:
+    plans = list(
+        (await session.execute(select(CarePlan).where(CarePlan.patient_id == patient_id)))
+        .scalars()
+        .all()
+    )
+    since = care.local_now().date() - timedelta(days=days - 1)
+    logs = list(
+        (
+            await session.execute(
+                select(CareLog).where(CareLog.patient_id == patient_id, CareLog.log_date >= since)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return care.active_plan(plans), logs
+
+
+def _today_view(meds, plan, logs, today) -> TodayView:
+    done_keys = {lg.item_key for lg in logs if lg.log_date == today and lg.done}
+    items = care.today_items(meds, plan, done_keys)
+    return TodayView(done=sum(1 for i in items if i["done"]), total=len(items), items=items)
+
+
+async def _follow_up(session: AsyncSession, plan: CarePlan | None) -> FollowUp | None:
+    if plan is None or plan.follow_up_date is None:
+        return None
+    doc = await session.get(Doctor, plan.doctor_id) if plan.doctor_id else None
+    return FollowUp(
+        date=plan.follow_up_date.isoformat(),
+        when=plan.follow_up_date.strftime("%a %d %b"),
+        with_doctor=f"Dr {doc.name}" if doc else None,
+    )
+
+
+@router.get("/home", response_model=PatientHome)
+async def home(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> PatientHome:
+    me = await _self_patient(session, principal.user_id)
+    records = [r for r in await _own_records(session, me.id) if r.verified]
+    plan, logs = await _plan_and_logs(session, me.id)
+    now = care.local_now()
+    meds = rx.current_medications(records)
+    today = _today_view(meds, plan, logs, now.date())
+    nxt = care.next_medicine([i.model_dump() for i in today.items], now)
+    pending = (
+        await session.execute(
+            select(func.count())
+            .select_from(AccessRequest)
+            .where(
+                AccessRequest.patient_id == me.id,
+                AccessRequest.status == AccessRequestStatus.pending.value,
+            )
+        )
+    ).scalar_one()
+    labs = [r for r in records if r.type == "lab"]
+    return PatientHome(
+        name=me.name,
+        next_medicine=NextMedicine(**nxt) if nxt else None,
+        today=today,
+        summary=SummaryView(**care.plain_summary(records, plan)),
+        reports=[ReportView(**x) for x in care.reports(records, 2)],
+        more_reports=len(labs) > 2,
+        tips=[TipView(**t) for t in care.tips(records, plan)],
+        asks=care.ASKS,
+        follow_up=await _follow_up(session, plan),
+        pending_requests=pending,
+    )
+
+
+@router.get("/care-plan", response_model=CarePlanView)
+async def care_plan(
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> CarePlanView:
+    me = await _self_patient(session, principal.user_id)
+    records = [r for r in await _own_records(session, me.id) if r.verified]
+    plan, logs = await _plan_and_logs(session, me.id)
+    now = care.local_now()
+    today = _today_view(rx.current_medications(records), plan, logs, now.date())
+    view = care.plan_view(plan, now)
+    if view is None:
+        return CarePlanView(has_plan=False, today=today)
+    doc = await session.get(Doctor, plan.doctor_id) if plan.doctor_id else None
+    return CarePlanView(
+        has_plan=True,
+        issued_by=f"Dr {doc.name}" if doc else None,
+        issued_on=view["issued_on"],
+        week=view["week"],
+        of=view["of"],
+        percent=view["percent"],
+        today=today,
+        diet=view["diet"],
+        activity=view["activity"],
+        events=view["events"],
+        follow_up=await _follow_up(session, plan),
+    )
+
+
+@router.post("/care/log", response_model=TodayView)
+async def log_care(
+    body: CareLogRequest,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> TodayView:
+    if not body.item_key.startswith(("med:", "act:", "diet:")):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown care item")
+    me = await _self_patient(session, principal.user_id)
+    today = care.local_now().date()
+    row = (
+        await session.execute(
+            select(CareLog).where(
+                CareLog.patient_id == me.id,
+                CareLog.item_key == body.item_key,
+                CareLog.log_date == today,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        session.add(CareLog(patient_id=me.id, item_key=body.item_key, log_date=today, done=body.done))
+    else:
+        row.done = body.done
+    await session.commit()
+    records = [r for r in await _own_records(session, me.id) if r.verified]
+    plan, logs = await _plan_and_logs(session, me.id)
+    return _today_view(rx.current_medications(records), plan, logs, today)
+
+
+@router.post("/ask", response_model=PatientAnswer)
+async def ask_my_records(
+    body: PatientAskRequest,
+    principal: Principal = Depends(require_patient),
+    session: AsyncSession = Depends(get_session),
+) -> PatientAnswer:
+    """Plain-language Q&A grounded only in the patient's own confirmed records."""
+    me = await _self_patient(session, principal.user_id)
+    records = [r for r in await _own_records(session, me.id) if r.verified]
+    plan, _ = await _plan_and_logs(session, me.id)
+    if ai._use_stub():
+        result = care.answer_patient(records, plan, body.question)
+    else:
+        raw = await ai.ask(records, body.question, audience="patient")
+        result = {
+            "answer": raw["answer"],
+            "answered_from_records": raw["answered_from_records"],
+            "source_record_ids": raw["source_record_ids"],
+        }
+    return PatientAnswer(**result)

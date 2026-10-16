@@ -1,11 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/env.dart';
 import '../../theme.dart';
 import 'models.dart';
 import 'records_repository.dart';
+import 'scan_session.dart';
 
 class ExtractionReviewScreen extends ConsumerStatefulWidget {
   const ExtractionReviewScreen({super.key, required this.recordId});
@@ -46,6 +50,14 @@ class _State extends ConsumerState<ExtractionReviewScreen> {
       setState(() {
         _extraction = ex;
         _data = data;
+        // Guess the record type from what was found.
+        if (data.labResults.isNotEmpty && data.medications.isEmpty) _type = 'lab';
+        if (Env.demo) {
+          final n = DateTime.now();
+          _docDate.text =
+              '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+          _provider.text = 'Chughtai Lab';
+        }
         _loading = false;
       });
     } on DioException catch (e) {
@@ -55,6 +67,8 @@ class _State extends ConsumerState<ExtractionReviewScreen> {
       });
     }
   }
+
+  int _lowCount(RecordData d) => _extraction?.confidenceByField.values.where((c) => c < 0.7).length ?? 0;
 
   bool _lowConfidence(String path) {
     final c = _extraction?.confidenceByField[path];
@@ -130,6 +144,7 @@ class _State extends ConsumerState<ExtractionReviewScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _PicturePreview(bytes: ref.watch(scanImageProvider), onConfirm: _lowCount(data)),
               DropdownButtonFormField<String>(
                 value: _type,
                 decoration: const InputDecoration(labelText: 'Record type'),
@@ -395,4 +410,69 @@ Widget _field(String label, String value, ValueChanged<String> onChanged, {bool 
       ],
     ),
   );
+}
+
+
+/// The picture that was scanned, shown beside what was read from it.
+class _PicturePreview extends StatelessWidget {
+  const _PicturePreview({required this.bytes, required this.onConfirm});
+  final Uint8List? bytes;
+  final int onConfirm; // number of values that need a human check
+
+  @override
+  Widget build(BuildContext context) {
+    if (bytes == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: MediCardColors.border),
+      ),
+      child: Row(children: [
+        InkWell(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (_) => Dialog(
+              child: InteractiveViewer(child: Image.memory(bytes!)),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 84,
+              height: 104,
+              child: Image.memory(
+                bytes!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.description_outlined, size: 40),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [
+              Icon(Icons.document_scanner, size: 18, color: MediCardColors.primary),
+              SizedBox(width: 6),
+              Text('Read from your picture',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              onConfirm == 0
+                  ? 'Everything was read clearly. Please still check it.'
+                  : '$onConfirm value${onConfirm == 1 ? '' : 's'} need your check — marked below.',
+              style: const TextStyle(fontSize: 13, color: MediCardColors.muted, height: 1.35),
+            ),
+            const SizedBox(height: 4),
+            const Text('Tap the picture to enlarge it.',
+                style: TextStyle(fontSize: 11.5, color: MediCardColors.muted)),
+          ]),
+        ),
+      ]),
+    );
+  }
 }

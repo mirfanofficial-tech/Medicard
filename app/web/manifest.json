@@ -1,11 +1,11 @@
 {
-    "name": "medicard",
-    "short_name": "medicard",
+    "name": "MediCard",
+    "short_name": "MediCard",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A5D57",
+    "theme_color": "#0E7A73",
+    "description": "Your complete health history, shared only when you say so.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

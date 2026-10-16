@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dates.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import '../patient/record_type_ui.dart';
@@ -86,7 +87,7 @@ class RecordDetailScreen extends ConsumerWidget {
                             style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w700)),
                         Text(
-                          [d.summary.docDate, d.summary.provider]
+                          [d.summary.docDate == null ? null : prettyDate(d.summary.docDate), d.summary.provider]
                               .where((e) => e != null)
                               .join(' · '),
                           style: const TextStyle(fontSize: 12, color: MediCardColors.muted),

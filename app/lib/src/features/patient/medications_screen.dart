@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dates.dart';
+import '../../core/medicine_info.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import 'patient_repository.dart';
@@ -46,11 +48,21 @@ class MedicationsScreen extends ConsumerWidget {
                         [m.name, m.dose].where((e) => e != null && e.isNotEmpty).join(' '),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      subtitle: Text([
-                        if (m.freq != null && m.freq!.isNotEmpty) m.freq,
-                        if (m.route != null && m.route!.isNotEmpty) m.route,
-                        if (m.sourceDate != null) 'since ${m.sourceDate}',
-                      ].where((e) => e != null).join(' · ')),
+                      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text([
+                          if (m.freq != null && m.freq!.isNotEmpty) m.freq,
+                          if (m.sourceDate != null) 'prescribed ${prettyDate(m.sourceDate)}',
+                        ].where((e) => e != null).join(' · ')),
+                        if (medicinePurpose(m.name) != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(medicinePurpose(m.name)!,
+                                style: const TextStyle(
+                                    color: MediCardColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5)),
+                          ),
+                      ]),
                     ),
                   ),
             ],

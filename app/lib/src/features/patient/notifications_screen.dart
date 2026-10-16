@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dates.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import '../access/access_repository.dart';
@@ -100,7 +101,7 @@ class NotificationsScreen extends ConsumerWidget {
         subtitle: Text([
           if (e.doctorName != null) 'Dr ${e.doctorName}',
           if (e.reason != null) 'reason: ${e.reason}',
-          e.at.substring(0, 16).replaceFirst('T', ' '),
+          prettyStamp(e.at),
         ].join(' · ')),
       ),
     );

@@ -3,13 +3,16 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/env.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import 'records_repository.dart';
+import 'scan_session.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   const UploadScreen({super.key, this.asTab = true});
@@ -37,13 +40,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         return;
       }
       setState(() => _picked = p.filename);
+      ref.read(scanImageProvider.notifier).state = p.bytes;
       final id = await ref.read(recordsRepositoryProvider).upload(
             bytes: p.bytes,
             filename: p.filename,
             contentType: p.contentType,
           );
       ref.invalidate(recordsListProvider);
-      if (mounted) context.push('/patient/records/$id/review');
+      // Demo: show the scanner animation first; the data that follows is static.
+      if (mounted) context.push('/patient/records/$id/${Env.demo ? 'scanning' : 'review'}');
     } on DioException catch (e) {
       setState(() => _error = e.response?.data?['detail']?.toString() ?? 'Upload failed');
     } catch (e) {
@@ -65,6 +70,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final bytes = await x.readAsBytes();
     final ct = x.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
     return _Pick(bytes, x.name, ct);
+  }
+
+  /// Demo only: a built-in photo of a lab report, for when there is nothing to upload.
+  Future<_Pick?> _sample() async {
+    final data = await rootBundle.load('assets/demo/sample_lipid_report.png');
+    return _Pick(data.buffer.asUint8List(), 'sample_lipid_report.png', 'image/png');
   }
 
   Future<_Pick?> _fromFiles() async {
@@ -123,6 +134,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 ),
               ),
             ),
+            if (Env.demo) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _handle(_sample),
+                icon: const Icon(Icons.bolt),
+                label: const Text('Try with a sample lab report'),
+              ),
+            ],
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed:

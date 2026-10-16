@@ -28,6 +28,15 @@ ASK_SYSTEM = (
     "Cite the record id(s) you used. Never recommend a prescription or a dose change."
 )
 
+ASK_SYSTEM_PATIENT = (
+    "You answer a patient's question in very simple, kind language (short sentences) using "
+    "ONLY the patient's own records provided as JSON. Do not use outside knowledge to add "
+    "facts about this patient. If the answer is not in the records, say so and set "
+    "answered_from_records to false. Cite the record id(s) you used. Never recommend starting, "
+    "stopping or changing a medicine or dose, never diagnose; for those, tell the patient to "
+    "ask their doctor."
+)
+
 
 def records_payload(records: list[Record]) -> list[dict]:
     return [
@@ -161,7 +170,7 @@ async def summarize(records: list[Record]) -> dict:
     }
 
 
-async def ask(records: list[Record], question: str) -> dict:
+async def ask(records: list[Record], question: str, audience: str = "physician") -> dict:
     payload = records_payload(records)
     if _use_stub():
         return {**_stub_answer(payload, question), "model": "stub"}
@@ -172,7 +181,7 @@ async def ask(records: list[Record], question: str) -> dict:
         'Respond with ONLY JSON: {"answer": str, "source_record_ids": [str], '
         '"answered_from_records": bool}'
     )
-    raw = await _call(ASK_SYSTEM, prompt)
+    raw = await _call(ASK_SYSTEM_PATIENT if audience == "patient" else ASK_SYSTEM, prompt)
     return {
         "answer": str(raw.get("answer", "")),
         "source_record_ids": raw.get("source_record_ids", []) or [],

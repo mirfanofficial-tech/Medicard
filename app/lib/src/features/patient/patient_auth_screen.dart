@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/env.dart';
 import '../../theme.dart';
+import '../../ui/auth_shell.dart';
 import '../../ui/widgets.dart';
 
 class PatientAuthScreen extends ConsumerStatefulWidget {
@@ -16,7 +18,8 @@ class PatientAuthScreen extends ConsumerStatefulWidget {
 }
 
 class _PatientAuthScreenState extends ConsumerState<PatientAuthScreen> {
-  final _phone = TextEditingController();
+  final _phone =
+      TextEditingController(text: Env.demoPrefill ? '+923001112222' : '');
   final _code = TextEditingController();
   final _name = TextEditingController();
 
@@ -54,6 +57,7 @@ class _PatientAuthScreenState extends ConsumerState<PatientAuthScreen> {
         setState(() {
           _codeSent = true;
           _devCode = dev;
+          if (Env.demoPrefill && dev != null) _code.text = dev;
         });
       });
 
@@ -69,100 +73,158 @@ class _PatientAuthScreenState extends ConsumerState<PatientAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_codeSent ? 'Verify code' : 'Sign in'),
-        leading: BackButton(
-          onPressed: () => _codeSent ? setState(() => _codeSent = false) : context.go('/'),
-        ),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: _codeSent ? _otpStep() : _phoneStep(),
-        ),
-      ),
+    return AuthShell(
+      roleLabel: 'For patients',
+      headline: 'Your health history,\nalways with you.',
+      tagline: 'Keep every prescription and report in one place, and share it with a '
+          'doctor only when you say so.',
+      points: const [
+        AuthPoint(Icons.document_scanner_outlined,
+            'Snap a paper prescription or lab report — AI turns it into a clean record.'),
+        AuthPoint(Icons.verified_user_outlined,
+            'Nothing is saved until you confirm it. Verified data is clearly marked.'),
+        AuthPoint(Icons.lock_person_outlined,
+            'Doctors see your records only after you approve each visit.'),
+      ],
+      onBack: _codeSent ? () => setState(() => _codeSent = false) : null,
+      child: AuthCard(child: _codeSent ? _otpStep() : _phoneStep()),
     );
   }
 
-  List<Widget> _phoneStep() => [
-        const Text('Welcome 👋',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: MediCardColors.ink)),
-        const SizedBox(height: 4),
-        const Text('We send a one-time code to your phone. No password to remember.',
-            style: TextStyle(color: MediCardColors.muted)),
-        const SizedBox(height: 24),
-        TextField(
-          controller: _phone,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Phone number',
-            hintText: '+92 300 1234567',
-            prefixIcon: Icon(Icons.phone_outlined),
-          ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(_error!, style: const TextStyle(color: Colors.red)),
-          ),
-        const SizedBox(height: 24),
-        FilledButton(
-          onPressed: _busy ? null : _sendCode,
-          child: Text(_busy ? 'Please wait…' : 'Send code'),
-        ),
-      ];
+  Widget _title(String title, String subtitle) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.w800, color: MediCardColors.ink)),
+          const SizedBox(height: 6),
+          Text(subtitle, style: const TextStyle(color: MediCardColors.muted, height: 1.4)),
+        ],
+      );
 
-  List<Widget> _otpStep() => [
-        Center(
-          child: Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: MediCardColors.primaryTint,
-              borderRadius: BorderRadius.circular(20),
+  Widget _phoneStep() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _title('Welcome 👋',
+              'Sign in or create your account with your phone number. We’ll text you a '
+              'one-time code — no password to remember.'),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _busy ? null : _sendCode(),
+            autofillHints: const [AutofillHints.telephoneNumber],
+            decoration: const InputDecoration(
+              labelText: 'Phone number',
+              hintText: '+92 300 1234567',
+              prefixIcon: Icon(Icons.phone_outlined),
             ),
-            child: const Icon(Icons.sms_outlined, color: MediCardColors.primary, size: 30),
           ),
-        ),
-        const SizedBox(height: 20),
-        const Center(
-          child: Text('Enter the 6-digit code',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-        ),
-        const SizedBox(height: 4),
-        Center(
-          child: Text('Sent to ${_phone.text.trim()}',
-              style: const TextStyle(color: MediCardColors.muted)),
-        ),
-        const SizedBox(height: 20),
-        PinBoxes(controller: _code, onCompleted: (_) => _verify()),
-        if (_devCode != null)
+          if (_error != null) ...[const SizedBox(height: 14), AuthError(_error!)],
+          const SizedBox(height: 22),
+          FilledButton(
+            onPressed: _busy ? null : _sendCode,
+            child: _busy ? const _Spinner() : const Text('Send code'),
+          ),
+          const SizedBox(height: 18),
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, size: 15, color: MediCardColors.muted),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text('Your health data is private and encrypted in transit.',
+                    style: TextStyle(fontSize: 12, color: MediCardColors.muted)),
+              ),
+            ],
+          ),
+          const Divider(height: 36),
           Center(
-            child: Text('Dev code: $_devCode',
-                style: const TextStyle(color: MediCardColors.muted, fontSize: 12)),
+            child: TextButton(
+              onPressed: () => context.go('/doctor/auth'),
+              child: const Text('Are you a doctor? Sign in here'),
+            ),
           ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _name,
-          decoration: const InputDecoration(
-            labelText: 'Your name (first time only)',
-            prefixIcon: Icon(Icons.person_outline),
+        ],
+      );
+
+  Widget _otpStep() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: MediCardColors.primaryTint,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(Icons.sms_outlined, color: MediCardColors.primary, size: 28),
+            ),
           ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(_error!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 18),
+          const Center(
+            child: Text('Enter the 6-digit code',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           ),
-        const SizedBox(height: 20),
-        FilledButton(
-          onPressed: _busy ? null : _verify,
-          child: Text(_busy ? 'Verifying…' : 'Verify & continue'),
-        ),
-        TextButton(
-          onPressed: _busy ? null : _sendCode,
-          child: const Text('Resend code'),
-        ),
-      ];
+          const SizedBox(height: 4),
+          Center(
+            child: Text('Sent to ${_phone.text.trim()}',
+                style: const TextStyle(color: MediCardColors.muted)),
+          ),
+          const SizedBox(height: 20),
+          PinBoxes(controller: _code, onCompleted: (_) => _verify()),
+          if (_devCode != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: Text('Dev code: $_devCode',
+                    style: const TextStyle(color: MediCardColors.muted, fontSize: 12)),
+              ),
+            ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _name,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _busy ? null : _verify(),
+            decoration: const InputDecoration(
+              labelText: 'Your name (first time only)',
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+          ),
+          if (_error != null) ...[const SizedBox(height: 14), AuthError(_error!)],
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _busy ? null : _verify,
+            child: _busy ? const _Spinner() : const Text('Verify & continue'),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: _busy ? null : () => setState(() => _codeSent = false),
+                child: const Text('Change number'),
+              ),
+              const Text('·', style: TextStyle(color: MediCardColors.muted)),
+              TextButton(
+                onPressed: _busy ? null : _sendCode,
+                child: const Text('Resend code'),
+              ),
+            ],
+          ),
+        ],
+      );
+}
+
+class _Spinner extends StatelessWidget {
+  const _Spinner();
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+      );
 }

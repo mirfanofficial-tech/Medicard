@@ -2,8 +2,8 @@
 Namecheap Passenger WSGI entry point for MediCard FastAPI backend.
 Uses a synchronous WSGI wrapper around the ASGI FastAPI app.
 """
-import sys
 import os
+import sys
 
 # Ensure the app directory is on the path
 sys.path.insert(0, os.path.dirname(__file__))

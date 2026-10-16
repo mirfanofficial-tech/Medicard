@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../demo/demo_data.dart' show demoQuestions;
 import '../../theme.dart';
 import '../access/access_repository.dart';
 import '../access/models.dart';
+import 'patient_records_screen.dart' show doctorRecordsProvider;
 
 class AiPanelScreen extends ConsumerStatefulWidget {
   const AiPanelScreen({super.key, required this.patientId});
@@ -71,7 +73,10 @@ class _State extends ConsumerState<AiPanelScreen> {
             ),
           ),
           Expanded(
-            child: ListView(
+            child: Center(
+             child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 summary.when(
@@ -84,7 +89,27 @@ class _State extends ConsumerState<AiPanelScreen> {
                 ),
                 const Divider(height: 32),
                 Text('Ask about this record', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
+                const Text('Tap a question to try it, or type your own.',
+                    style: TextStyle(fontSize: 12.5, color: MediCardColors.muted)),
+                const SizedBox(height: 10),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final q in demoQuestions)
+                    ActionChip(
+                      label: Text(q),
+                      onPressed: _asking
+                          ? null
+                          : () {
+                              _q.text = q;
+                              _ask();
+                            },
+                      backgroundColor: MediCardColors.primaryTint,
+                      side: BorderSide.none,
+                      labelStyle: const TextStyle(
+                          color: Color(0xFF0A5D57), fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                ]),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _q,
                   decoration: const InputDecoration(
@@ -106,7 +131,7 @@ class _State extends ConsumerState<AiPanelScreen> {
                 if (_answer != null) _answerView(_answer!),
               ],
             ),
-          ),
+          ))),
         ],
       ),
     );
@@ -188,6 +213,22 @@ class _State extends ConsumerState<AiPanelScreen> {
     );
   }
 
+  /// "Lab · 12 Oct" when the record list is loaded, otherwise a short id.
+  String _label(String id) {
+    final rows = ref.watch(doctorRecordsProvider(widget.patientId)).valueOrNull;
+    final r = rows?.where((x) => x.id == id).firstOrNull;
+    if (r == null) return 'record ${id.length > 8 ? id.substring(0, 8) : id}';
+    final kind = switch (r.type) {
+      'lab' => 'Lab',
+      'prescription' => 'Prescription',
+      'imaging' => 'Imaging',
+      _ => 'Note',
+    };
+    final d = DateTime.tryParse(r.docDate ?? '');
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return d == null ? kind : '$kind · ${d.day} ${m[d.month - 1]}';
+  }
+
   Widget _sourceChips(List<String> ids) {
     if (ids.isEmpty) return const SizedBox.shrink();
     return Wrap(
@@ -196,7 +237,7 @@ class _State extends ConsumerState<AiPanelScreen> {
       children: [
         for (final id in ids)
           ActionChip(
-            label: Text('record ${id.substring(0, 8)}', style: const TextStyle(fontSize: 11)),
+            label: Text(_label(id), style: const TextStyle(fontSize: 11)),
             onPressed: () => _openRecord(id),
           ),
       ],

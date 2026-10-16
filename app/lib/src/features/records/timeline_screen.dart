@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dates.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import '../patient/record_type_ui.dart';
@@ -126,7 +127,9 @@ class _RecordCard extends StatelessWidget {
           child: Icon(ui.icon, color: ui.color, size: 20),
         ),
         title: Text(ui.label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text([r.docDate, r.provider].where((e) => e != null).join(' · ')),
+        subtitle: Text([r.docDate == null ? null : prettyDate(r.docDate), r.provider]
+            .where((e) => e != null)
+            .join(' · ')),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,

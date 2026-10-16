@@ -10,6 +10,7 @@ from app.models.access import (
     GrantSource,
 )
 from app.models.base import Base
+from app.models.care import CareLog, CarePlan
 from app.models.doctor import Doctor, DoctorStatus
 from app.models.otp import OtpChallenge, OtpPurpose
 from app.models.patient import Patient
@@ -36,4 +37,6 @@ __all__ = [
     "GrantSource",
     "AuditLog",
     "AuditAction",
+    "CarePlan",
+    "CareLog",
 ]

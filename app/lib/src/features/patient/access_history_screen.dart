@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/dates.dart';
 import '../../theme.dart';
 import '../access/access_repository.dart';
 import '../access/models.dart';
@@ -17,6 +18,7 @@ class AccessHistoryScreen extends ConsumerWidget {
         'end' => ('Doctor ended session', Icons.logout, null),
         'view' => ('Record viewed', Icons.visibility, null),
         'request' => ('Access requested', Icons.person_add, null),
+        'prescribe' => ('Prescription added', Icons.edit_note, MediCardColors.primary),
         _ => (action, Icons.circle, null),
       };
 
@@ -54,7 +56,7 @@ class AccessHistoryScreen extends ConsumerWidget {
                         title: Text('Dr ${g['doctor_name']}'),
                         subtitle: Text(
                           '${g['scope'] == 'critical' ? 'Emergency (critical only)' : 'Full record'}'
-                          ' · until ${(g['expires_at'] as String).substring(0, 16).replaceFirst('T', ' ')}',
+                          ' · until ${prettyUntil(g['expires_at'] as String)}',
                         ),
                         trailing: TextButton(
                           onPressed: () async {
@@ -97,10 +99,9 @@ class AccessHistoryScreen extends ConsumerWidget {
       subtitle: Text([
         if (who != null) who,
         if (e.hospital != null) e.hospital,
-        if (e.scope != null) 'scope: ${e.scope}',
+        if (e.scope == 'critical') 'critical info only',
         if (e.reason != null) 'reason: ${e.reason}',
-        'for ${e.forPatient}',
-        e.at.substring(0, 16).replaceFirst('T', ' '),
+        prettyStamp(e.at),
       ].join(' · ')),
     );
   }

@@ -8,6 +8,7 @@ class Medication(BaseModel):
     dose: str | None = None
     route: str | None = None
     freq: str | None = None
+    days: str | None = None
 
 
 class LabResult(BaseModel):
@@ -17,11 +18,27 @@ class LabResult(BaseModel):
     ref_range: str | None = None
 
 
+class Reaction(BaseModel):
+    """A documented adverse effect of a medicine, in the patient's own history."""
+
+    drug: str
+    effect: str
+    date: str | None = None
+
+
+class StoppedMed(BaseModel):
+    name: str
+    reason: str | None = None
+    date: str | None = None
+
+
 class RecordData(BaseModel):
     diagnoses: list[str] = Field(default_factory=list)
     medications: list[Medication] = Field(default_factory=list)
     lab_results: list[LabResult] = Field(default_factory=list)
     allergies: list[str] = Field(default_factory=list)
+    reactions: list[Reaction] = Field(default_factory=list)
+    stopped: list[StoppedMed] = Field(default_factory=list)
     notes: str | None = None
 
 

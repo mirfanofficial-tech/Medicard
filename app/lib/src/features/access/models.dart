@@ -1,3 +1,5 @@
+import '../care/care_models.dart' show HistoryAlert;
+
 class DoctorGrant {
   DoctorGrant({
     required this.grantId,
@@ -180,8 +182,10 @@ class RxContext {
     required this.candidates,
     required this.knownAllergies,
     required this.assistantNote,
+    this.historyAlerts = const [],
   });
 
+  final List<HistoryAlert> historyAlerts;
   final String patientName;
   final List<RxCandidate> candidates;
   final List<String> knownAllergies;
@@ -195,6 +199,9 @@ class RxContext {
         knownAllergies:
             (j['known_allergies'] as List? ?? []).map((e) => e.toString()).toList(),
         assistantNote: j['assistant_note'] as String? ?? '',
+        historyAlerts: (j['history_alerts'] as List? ?? [])
+            .map((e) => HistoryAlert.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
       );
 }
 

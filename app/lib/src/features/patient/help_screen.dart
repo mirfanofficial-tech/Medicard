@@ -43,8 +43,9 @@ class HelpScreen extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           const InfoBanner(
-            'Still stuck? Email support@medicard.example — this is a hackathon build, so '
-            'responses are best-effort.',
+            'Still stuck? Tap the “Ask AI” button on any screen — it can explain your reports, '
+            'medicines and next steps. For anything medical, ask your doctor.',
+            icon: Icons.auto_awesome,
           ),
         ],
       ),

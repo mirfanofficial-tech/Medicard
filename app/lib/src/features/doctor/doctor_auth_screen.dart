@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/env.dart';
+import '../../theme.dart';
+import '../../ui/auth_shell.dart';
+import '../../ui/widgets.dart';
 
 class DoctorAuthScreen extends ConsumerStatefulWidget {
   const DoctorAuthScreen({super.key});
@@ -14,13 +18,16 @@ class DoctorAuthScreen extends ConsumerStatefulWidget {
 }
 
 class _DoctorAuthScreenState extends ConsumerState<DoctorAuthScreen> {
-  bool _register = true;
+  bool _register = !Env.demoPrefill;
   bool _busy = false;
+  bool _showPassword = false;
   String? _error;
 
   final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
+  final _email = TextEditingController(
+      text: Env.demoPrefill ? 'sara.ahmed@medicard-demo.com' : '');
+  final _password =
+      TextEditingController(text: Env.demoPrefill ? 'demodemo123' : '');
   final _licence = TextEditingController();
   final _specialty = TextEditingController();
   final _hospital = TextEditingController();
@@ -35,7 +42,24 @@ class _DoctorAuthScreenState extends ConsumerState<DoctorAuthScreen> {
 
   AuthRepository get _repo => ref.read(authRepositoryProvider);
 
+  String? _validate() {
+    if (_register && _name.text.trim().length < 2) return 'Enter your full name.';
+    if (_register && _licence.text.trim().length < 3) {
+      return 'Enter your PMDC licence number.';
+    }
+    if (!_email.text.contains('@')) return 'Enter a valid email address.';
+    if (_password.text.length < (_register ? 8 : 1)) {
+      return _register ? 'Password must be at least 8 characters.' : 'Enter your password.';
+    }
+    return null;
+  }
+
   Future<void> _submit() async {
+    final problem = _validate();
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -67,54 +91,90 @@ class _DoctorAuthScreenState extends ConsumerState<DoctorAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_register ? 'Doctor registration' : 'Doctor sign in'),
-        leading: BackButton(onPressed: () => context.go('/')),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
+    return AuthShell(
+      roleLabel: 'For doctors',
+      headline: 'The full picture,\nwith the patient’s consent.',
+      tagline: 'See a patient’s verified history in seconds — no paper files, no phone '
+          'calls to other clinics.',
+      points: const [
+        AuthPoint(Icons.badge_outlined,
+            'Your PMDC licence is checked before you can search any patient.'),
+        AuthPoint(Icons.key_outlined,
+            'Access is per visit: the patient approves it, it expires, and it is logged.'),
+        AuthPoint(Icons.auto_awesome_outlined,
+            'Advisory AI highlights trends and interactions — you make every clinical call.'),
+      ],
+      child: AuthCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Register')),
-                ButtonSegment(value: false, label: Text('Sign in')),
-              ],
-              selected: {_register},
-              onSelectionChanged: (s) => setState(() => _register = s.first),
+            AuthToggle(
+              leftLabel: 'Register',
+              rightLabel: 'Sign in',
+              leftSelected: _register,
+              onChanged: (v) => setState(() {
+                _register = v;
+                _error = null;
+              }),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
+            Text(_register ? 'Doctor registration' : 'Doctor sign in',
+                style: const TextStyle(
+                    fontSize: 24, fontWeight: FontWeight.w800, color: MediCardColors.ink)),
+            const SizedBox(height: 6),
+            Text(
+              _register
+                  ? 'Create your account to request access to patient records.'
+                  : 'Welcome back. Sign in to continue.',
+              style: const TextStyle(color: MediCardColors.muted, height: 1.4),
+            ),
+            const SizedBox(height: 22),
             if (_register) ...[
-              _field(_name, 'Full name'),
-              _field(_licence, 'PMDC licence number'),
-              _field(_specialty, 'Specialty (optional)'),
-              _field(_hospital, 'Hospital / clinic (optional)'),
+              _field(_name, 'Full name', Icons.person_outline,
+                  hints: const [AutofillHints.name]),
+              _field(_licence, 'PMDC licence number', Icons.badge_outlined),
+              _field(_specialty, 'Specialty (optional)', Icons.medical_services_outlined),
+              _field(_hospital, 'Hospital / clinic (optional)', Icons.local_hospital_outlined),
             ],
-            _field(_email, 'Email', keyboard: TextInputType.emailAddress),
-            _field(_password, 'Password', obscure: true),
+            _field(_email, 'Email', Icons.mail_outline,
+                keyboard: TextInputType.emailAddress,
+                hints: const [AutofillHints.email]),
+            _field(_password, 'Password', Icons.lock_outline,
+                obscure: !_showPassword,
+                last: true,
+                hints: [_register ? AutofillHints.newPassword : AutofillHints.password],
+                suffix: IconButton(
+                  tooltip: _showPassword ? 'Hide password' : 'Show password',
+                  icon: Icon(_showPassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined),
+                  onPressed: () => setState(() => _showPassword = !_showPassword),
+                )),
             if (_register)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  'New accounts are reviewed against the licence register before they '
-                  'can search patient records.',
-                  style: TextStyle(fontSize: 12),
-                ),
+              const InfoBanner(
+                'New accounts are reviewed against the licence register before they '
+                'can search patient records.',
+                icon: Icons.verified_outlined,
               ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!, style: const TextStyle(color: Colors.red)),
-              ),
-            const SizedBox(height: 24),
+            if (_error != null) ...[const SizedBox(height: 14), AuthError(_error!)],
+            const SizedBox(height: 22),
             FilledButton(
               onPressed: _busy ? null : _submit,
-              child: Text(_busy
-                  ? 'Please wait...'
-                  : _register
-                      ? 'Create account'
-                      : 'Sign in'),
+              child: _busy
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                    )
+                  : Text(_register ? 'Create account' : 'Sign in'),
+            ),
+            const Divider(height: 36),
+            Center(
+              child: TextButton(
+                onPressed: () => context.go('/patient/auth'),
+                child: const Text('Not a doctor? Patient sign in'),
+              ),
             ),
           ],
         ),
@@ -124,17 +184,28 @@ class _DoctorAuthScreenState extends ConsumerState<DoctorAuthScreen> {
 
   Widget _field(
     TextEditingController c,
-    String label, {
+    String label,
+    IconData icon, {
     bool obscure = false,
+    bool last = false,
     TextInputType? keyboard,
+    Iterable<String>? hints,
+    Widget? suffix,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
         controller: c,
         obscureText: obscure,
         keyboardType: keyboard,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        autofillHints: hints,
+        textInputAction: last ? TextInputAction.done : TextInputAction.next,
+        onSubmitted: last ? (_) => _busy ? null : _submit() : null,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          suffixIcon: suffix,
+        ),
       ),
     );
   }

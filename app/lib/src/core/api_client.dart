@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../demo/demo_backend.dart';
 import 'env.dart';
 
 /// Secure token store. Access + refresh tokens live here, never in memory-only
@@ -25,8 +26,34 @@ class TokenStore {
   }
 }
 
+/// Demo mode: tokens live in memory, so a doctor tab and a patient tab on the same
+/// browser each keep their own sign-in (secure storage is shared between tabs).
+class _MemoryTokenStore extends TokenStore {
+  _MemoryTokenStore() : super(const FlutterSecureStorage());
+
+  String? _access;
+  String? _refresh;
+
+  @override
+  Future<String?> get accessToken async => _access;
+  @override
+  Future<String?> get refreshToken async => _refresh;
+
+  @override
+  Future<void> save({required String access, required String refresh}) async {
+    _access = access;
+    _refresh = refresh;
+  }
+
+  @override
+  Future<void> clear() async {
+    _access = null;
+    _refresh = null;
+  }
+}
+
 final tokenStoreProvider = Provider<TokenStore>(
-  (ref) => const TokenStore(FlutterSecureStorage()),
+  (ref) => Env.demo ? _MemoryTokenStore() : const TokenStore(FlutterSecureStorage()),
 );
 
 final dioProvider = Provider<Dio>((ref) {
@@ -38,6 +65,8 @@ final dioProvider = Provider<Dio>((ref) {
       receiveTimeout: const Duration(seconds: 30),
     ),
   );
+  // DEMO=true: answer every call from static data — no network at all.
+  if (Env.demo) dio.httpClientAdapter = DemoAdapter();
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {

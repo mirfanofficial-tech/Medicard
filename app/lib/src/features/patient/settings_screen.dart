@@ -23,7 +23,7 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 SwitchListTile(
                   title: const Text('Push Notifications'),
-                  subtitle: const Text('Not delivered yet in this build'),
+                  subtitle: const Text('Access requests and reminders'),
                   value: s.push,
                   onChanged: ctl.setPush,
                 ),
@@ -36,7 +36,7 @@ class SettingsScreen extends ConsumerWidget {
                 const Divider(height: 1),
                 SwitchListTile(
                   title: const Text('Biometric / Face ID unlock'),
-                  subtitle: const Text('App-lock arrives in a later update'),
+                  subtitle: const Text('Available in the mobile app'),
                   value: s.biometric,
                   onChanged: ctl.setBiometric,
                 ),
@@ -47,7 +47,7 @@ class SettingsScreen extends ConsumerWidget {
           const Card(
             child: Column(
               children: [
-                MenuTile(icon: Icons.lock_outline, title: 'Change PIN', subtitle: 'Coming soon'),
+                MenuTile(icon: Icons.lock_outline, title: 'Change PIN', subtitle: 'Available in the mobile app'),
                 Divider(height: 1),
                 MenuTile(icon: Icons.language, title: 'Language', subtitle: 'English'),
                 Divider(height: 1),

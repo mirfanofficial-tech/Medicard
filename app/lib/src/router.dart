@@ -10,11 +10,11 @@ import 'features/doctor/doctor_home_screen.dart';
 import 'features/doctor/doctor_record_detail_screen.dart';
 import 'features/doctor/patient_records_screen.dart';
 import 'features/doctor/prescribe_screen.dart';
-import 'features/doctor/request_access_screen.dart';
 import 'features/landing/landing_screen.dart';
 import 'features/patient/access_history_screen.dart';
 import 'features/patient/access_requests_screen.dart';
 import 'features/patient/allergies_screen.dart';
+import 'features/patient/care_plan_screen.dart';
 import 'features/patient/help_screen.dart';
 import 'features/patient/medications_screen.dart';
 import 'features/patient/notifications_screen.dart';
@@ -27,6 +27,7 @@ import 'features/patient/settings_screen.dart';
 import 'features/patient/patient_shell.dart';
 import 'features/records/extraction_review_screen.dart';
 import 'features/records/record_detail_screen.dart';
+import 'features/records/scan_animation_screen.dart';
 import 'features/records/timeline_screen.dart';
 import 'features/records/upload_screen.dart';
 
@@ -65,6 +66,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ---- patient: full-screen routes above the tab shell ----
       GoRoute(
         parentNavigatorKey: _rootKey,
+        path: '/patient/records/:id/scanning',
+        builder: (_, s) => ScanAnimationScreen(recordId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
         path: '/patient/records/:id/review',
         builder: (_, s) => ExtractionReviewScreen(recordId: s.pathParameters['id']!),
       ),
@@ -72,6 +78,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootKey,
         path: '/patient/records/:id',
         builder: (_, s) => RecordDetailScreen(recordId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/patient/care-plan',
+        builder: (_, __) => const CarePlanScreen(),
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,
@@ -139,7 +150,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ---- doctor ----
       GoRoute(path: '/doctor', builder: (_, __) => const DoctorHomeScreen()),
-      GoRoute(path: '/doctor/request', builder: (_, __) => const RequestAccessScreen()),
+      // The dashboard now holds the code box, the emergency button and live access.
+      GoRoute(path: '/doctor/request', redirect: (_, __) => '/doctor'),
       GoRoute(
         path: '/doctor/patients/:id/records',
         builder: (_, s) => DoctorPatientRecordsScreen(patientId: s.pathParameters['id']!),
@@ -161,7 +173,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/doctor/patients/:id/prescribe',
-        builder: (_, s) => PrescribeScreen(patientId: s.pathParameters['id']!),
+        builder: (_, s) => PrescribeScreen(
+          patientId: s.pathParameters['id']!,
+          initialDictation: s.extra is String ? s.extra as String : null,
+        ),
       ),
     ],
   );

@@ -90,7 +90,13 @@ def _med_dict(m: dict) -> dict:
 
 def current_medications(records: list[Record]) -> list[dict]:
     """Deduped current meds from the patient's prescription records, newest first."""
-    seen: set[str] = set()
+    # A medicine the record says was stopped is no longer current.
+    seen: set[str] = {
+        _norm(x.get("name"))
+        for r in records
+        for x in (r.data or {}).get("stopped", []) or []
+        if _norm(x.get("name"))
+    }
     out: list[dict] = []
     rx = sorted(
         (r for r in records if r.type == "prescription"),

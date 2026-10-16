@@ -2,6 +2,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.schemas.care import Advice, HistoryAlert
 from app.schemas.record import Medication, RecordDetail
 
 
@@ -14,6 +15,7 @@ class RxContext(BaseModel):
     patient_name: str
     candidates: list[RxCandidate] = Field(default_factory=list)
     known_allergies: list[str] = Field(default_factory=list)
+    history_alerts: list[HistoryAlert] = Field(default_factory=list)
     assistant_note: str = (
         "You are the prescriber. This assistant only lists medicines already documented "
         "for this patient and runs allergy / interaction / duplicate checks on your draft. "
@@ -44,8 +46,10 @@ class RxCreateRequest(BaseModel):
     doc_date: date | None = None
     medications: list[RxLine] = Field(min_length=1)
     notes: str | None = Field(default=None, max_length=1000)
+    advice: Advice | None = None
 
 
 class RxCreateResult(BaseModel):
     record: RecordDetail
     checks: list[RxCheck] = Field(default_factory=list)
+    care_plan_created: bool = False

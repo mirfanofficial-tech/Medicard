@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/dates.dart';
 import '../../theme.dart';
 import '../../ui/widgets.dart';
 import '../access/access_repository.dart';
@@ -220,7 +221,7 @@ class _GrantCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = g['scope'] == 'critical' ? 'Emergency (critical only)' : 'Full record';
-    final until = (g['expires_at'] as String).substring(0, 16).replaceFirst('T', ' ');
+    final until = prettyUntil(g['expires_at'] as String);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
